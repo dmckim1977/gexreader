@@ -54,7 +54,7 @@ async def get_latest_records(pool):
                     AND major_pos_vol > 0
                     AND major_neg_vol > 0
                 """
-                today = date.today()
+                today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
                 async for row in await conn.cursor(query, today):
                     yield row
     except Exception as e:
@@ -81,7 +81,7 @@ async def check_new_records(pool, last_timestamps):
                         ORDER BY timestamp DESC
                         LIMIT 1
                     """
-                    today = date.today()
+                    today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
                     row = await conn.fetchrow(query, ticker, last_timestamp, today)
                     if row:
                         last_timestamps[ticker] = row[0]  # Update last timestamp
@@ -143,13 +143,3 @@ async def fetch_and_publish_data():
     finally:
         await pool.close()
         await redis_conn.aclose()
-
-async def main():
-    """Main function to run the script."""
-    try:
-        await fetch_and_publish_data()
-    except Exception as e:
-        print(f"Main error: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
