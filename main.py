@@ -71,7 +71,7 @@ async def check_new_records(pool, last_timestamps):
                 for ticker, last_timestamp in list(last_timestamps.items()):
                     query = """
                         SELECT timestamp, ticker, expiration, spot, zero_gamma, 
-                               major_pos_vol, major_neg_vol, sum_gex_vol
+                               major_pos_vol, major_neg_vol, sum_gex_vol,
                         FROM livegex_gex
                         WHERE ticker = $1
                         AND timestamp > $2
