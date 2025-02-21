@@ -52,8 +52,8 @@ async def get_latest_records(pool):
                 AND expiration >= $1
                 AND spot > 0
                 AND zero_gamma > 0
-                AND major_pos_vc > 0
-                AND major_neg_vc > 0
+                AND major_pos_vol > 0
+                AND major_neg_vol > 0
             """
             today = date.today()
             async for row in await conn.cursor(query, today):
