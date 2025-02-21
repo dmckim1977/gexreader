@@ -43,10 +43,10 @@ async def get_latest_records(pool):
                 SELECT ticker, timestamp, expiration, spot, zero_gamma, 
                        major_pos_vc AS major_pos_vol, major_neg_vc AS major_neg_vol, 
                        sum_gex_vo AS sum_gex_vol
-                FROM your_table_name
+                FROM livegex_gex
                 WHERE (ticker, timestamp) IN (
                     SELECT ticker, MAX(timestamp) 
-                    FROM your_table_name 
+                    FROM livegex_gex 
                     GROUP BY ticker
                 )
                 AND expiration >= $1
