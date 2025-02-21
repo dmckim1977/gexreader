@@ -62,9 +62,10 @@ async def get_latest_records(pool):
                 """
                 today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
                 logger.info(f"Executing query with today = {today}")
-                async for row in await conn.cursor(query, today):
-                    logger.info(f"Found record for ticker: {row[1]}")
-                    yield row
+                async with await conn.cursor(query, today) as cursor:  # Use cursor as a context manager
+                    async for row in cursor:  # Iterate over the cursor directly
+                        logger.info(f"Found record for ticker: {row[1]}")
+                        yield row
     except Exception as e:
         logger.error(f"Error fetching latest records: {e}")
         raise
