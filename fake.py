@@ -20,7 +20,7 @@ async def connect_to_redis():
         raise
 
 async def generate_fake_data():
-    """Generate fake data with jittered values and publish to Redis Pub/Sub."""
+    """Generate fake data with jittered values, include msg_type, and publish to Redis Pub/Sub."""
     redis_conn = await connect_to_redis()
 
     try:
@@ -42,8 +42,9 @@ async def generate_fake_data():
                 key: value + random.uniform(-10, 10) for key, value in base_values.items()
             }
 
-            # Create the fake data message
+            # Create the fake data message with msg_type
             fake_data = {
+                "msg_type": "fake_data",  # Add message type to indicate fake data
                 "timestamp": current_time,
                 "ticker": "SPX",
                 "expiration": "zero",
