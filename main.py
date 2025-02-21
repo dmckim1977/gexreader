@@ -41,8 +41,8 @@ async def get_latest_records(pool):
         async with pool.acquire() as conn:
             query = """
                 SELECT ticker, timestamp, expiration, spot, zero_gamma, 
-                       major_pos_vc AS major_pos_vol, major_neg_vc AS major_neg_vol, 
-                       sum_gex_vo AS sum_gex_vol
+                       major_pos_vol  major_neg_vol,
+                       sum_gex_vol
                 FROM livegex_gex
                 WHERE (ticker, timestamp) IN (
                     SELECT ticker, MAX(timestamp) 
