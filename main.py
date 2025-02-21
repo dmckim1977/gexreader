@@ -96,10 +96,10 @@ async def check_new_records(pool, last_timestamps):
                         logger.info(f"Found new record for ticker {ticker}")
                         last_timestamps[ticker] = row['timestamp']  # Update last timestamp using column name
                         yield row
-            await asyncio.sleep(5)  # Check every 5 seconds
+            await asyncio.sleep(20)  # Check every 5 seconds
         except Exception as e:
             logger.error(f"Error checking new records: {e}")
-            await asyncio.sleep(5)  # Wait before retrying
+            await asyncio.sleep(20)  # Wait before retrying
 
 async def fetch_and_publish_data():
     """Fetch and stream data from PostgreSQL, publishing to Redis Pub/Sub."""
