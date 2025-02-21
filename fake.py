@@ -45,14 +45,15 @@ async def generate_fake_data():
             # Create the fake data message with msg_type
             fake_data = {
                 "msg_type": "fake_data",  # Add message type to indicate fake data
-                "timestamp": current_time,
-                "ticker": "SPX",
-                "expiration": "zero",
-                "spot": jittered_values["spot"],
-                "zero_gamma": jittered_values["zero_gamma"],
-                "major_pos_vol": jittered_values["major_pos_vol"],
-                "major_neg_vol": jittered_values["major_neg_vol"],
-                "sum_gex_vol": jittered_values["sum_gex_vol"]
+                "data": {"timestamp": current_time,
+                    "ticker": "SPX",
+                    "expiration": "zero",
+                    "spot": jittered_values["spot"],
+                    "zero_gamma": jittered_values["zero_gamma"],
+                    "major_pos_vol": jittered_values["major_pos_vol"],
+                    "major_neg_vol": jittered_values["major_neg_vol"],
+                    "sum_gex_vol": jittered_values["sum_gex_vol"]
+                },
             }
 
             # Publish to Redis Pub/Sub channel 'gex2'
