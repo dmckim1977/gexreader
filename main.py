@@ -146,7 +146,7 @@ async def fetch_and_publish_data():
         print(f"Error in fetch_and_publish_data: {e}")
     finally:
         await pool.close()
-        await redis_conn.close()
+        await redis_conn.aclose()
 
 
 async def main():
