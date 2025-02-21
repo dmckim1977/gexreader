@@ -25,7 +25,6 @@ async def connect_to_database():
         print(f"Error connecting to PostgreSQL: {e}")
         raise
 
-
 async def connect_to_redis():
     """Establish connection to Redis using redis.asyncio."""
     try:
@@ -34,14 +33,13 @@ async def connect_to_redis():
         print(f"Error connecting to Redis: {e}")
         raise
 
-
 async def get_latest_records(pool):
     """Fetch the latest record for each ticker from PostgreSQL."""
     try:
         async with pool.acquire() as conn:
             query = """
                 SELECT ticker, timestamp, expiration, spot, zero_gamma, 
-                       major_pos_vol  major_neg_vol,
+                       major_pos_vol, major_neg_vol,  -- Fixed: Added comma between major_pos_vol and major_neg_vol
                        sum_gex_vol
                 FROM livegex_gex
                 WHERE (ticker, timestamp) IN (
@@ -62,7 +60,6 @@ async def get_latest_records(pool):
         print(f"Error fetching latest records: {e}")
         raise
 
-
 async def check_new_records(pool, last_timestamps):
     """Check for new records with later timestamps for each ticker every 5 seconds."""
     while True:
@@ -71,7 +68,7 @@ async def check_new_records(pool, last_timestamps):
                 for ticker, last_timestamp in list(last_timestamps.items()):
                     query = """
                         SELECT timestamp, ticker, expiration, spot, zero_gamma, 
-                               major_pos_vol, major_neg_vol, sum_gex_vol,
+                               major_pos_vol, major_neg_vol, sum_gex_vol
                         FROM livegex_gex
                         WHERE ticker = $1
                         AND timestamp > $2
@@ -92,7 +89,6 @@ async def check_new_records(pool, last_timestamps):
         except Exception as e:
             print(f"Error checking new records: {e}")
             await asyncio.sleep(5)  # Wait before retrying
-
 
 async def fetch_and_publish_data():
     """Fetch and stream data from PostgreSQL, publishing to Redis Pub/Sub."""
@@ -147,14 +143,12 @@ async def fetch_and_publish_data():
         await pool.close()
         await redis_conn.aclose()
 
-
 async def main():
     """Main function to run the script."""
     try:
         await fetch_and_publish_data()
     except Exception as e:
         print(f"Main error: {e}")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
