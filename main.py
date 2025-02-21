@@ -9,28 +9,34 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def connect_to_database():
     """Establish connection to PostgreSQL database using asyncpg."""
     try:
-        return await asyncpg.create_pool(
+        pool = await asyncpg.create_pool(
             user=os.getenv('POSTGRES_USER'),
             password=os.getenv('POSTGRES_PASSWORD'),
             database=os.getenv('POSTGRES_DB'),
             host=os.getenv('POSTGRES_HOST'),
             port=5432
         )
+        logger.info("Successfully connected to PostgreSQL database")
+        return pool
     except Exception as e:
-        print(f"Error connecting to PostgreSQL: {e}")
+        logger.error(f"Error connecting to PostgreSQL: {e}")
         raise
 
 async def connect_to_redis():
     """Establish connection to Redis using redis.asyncio."""
     try:
-        return await redis.Redis(host='localhost', port=6379, decode_responses=True)
+        redis_conn = await redis.Redis(host='localhost', port=6379, decode_responses=True)
+        logger.info("Successfully connected to Redis")
+        return redis_conn
     except Exception as e:
-        print(f"Error connecting to Redis: {e}")
+        logger.error(f"Error connecting to Redis: {e}")
         raise
 
 async def get_latest_records(pool):
@@ -55,10 +61,12 @@ async def get_latest_records(pool):
                     AND major_neg_vol > 0
                 """
                 today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
+                logger.info(f"Executing query with today = {today}")
                 async for row in await conn.cursor(query, today):
+                    logger.info(f"Found record for ticker: {row[1]}")
                     yield row
     except Exception as e:
-        print(f"Error fetching latest records: {e}")
+        logger.error(f"Error fetching latest records: {e}")
         raise
 
 async def check_new_records(pool, last_timestamps):
@@ -82,13 +90,15 @@ async def check_new_records(pool, last_timestamps):
                         LIMIT 1
                     """
                     today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
+                    logger.debug(f"Checking for new records for ticker {ticker}, last timestamp: {last_timestamp}, today: {today}")
                     row = await conn.fetchrow(query, ticker, last_timestamp, today)
                     if row:
+                        logger.info(f"Found new record for ticker {ticker}")
                         last_timestamps[ticker] = row[0]  # Update last timestamp
                         yield row
             await asyncio.sleep(5)  # Check every 5 seconds
         except Exception as e:
-            print(f"Error checking new records: {e}")
+            logger.error(f"Error checking new records: {e}")
             await asyncio.sleep(5)  # Wait before retrying
 
 async def fetch_and_publish_data():
@@ -101,6 +111,7 @@ async def fetch_and_publish_data():
         last_timestamps = {}
 
         # Get and publish initial latest records for each ticker
+        logger.info("Starting to fetch and publish initial latest records")
         async for row in get_latest_records(pool):
             ticker = row[1]  # ticker is at index 1 in the row
             last_timestamps[ticker] = row[0]  # timestamp is at index 0
@@ -117,9 +128,10 @@ async def fetch_and_publish_data():
             event_id = f"gex2:{datetime.now().isoformat()}"  # Match SSE event ID format
             message_data = json.dumps(data)
             await redis_conn.publish('gex2', message_data)
-            print(f"Published initial data for {ticker} to Redis channel 'gex2'")
+            logger.info(f"Published initial data for {ticker} to Redis channel 'gex2'")
 
         # Continuously check for new records every 5 seconds
+        logger.info("Starting to check for new records every 5 seconds")
         async for row in check_new_records(pool, last_timestamps):
             ticker = row[1]
             last_timestamps[ticker] = row[0]  # Update last timestamp
@@ -136,10 +148,20 @@ async def fetch_and_publish_data():
             event_id = f"gex2:{datetime.now().isoformat()}"  # Match SSE event ID format
             message_data = json.dumps(data)
             await redis_conn.publish('gex2', message_data)
-            print(f"Published new data for {ticker} to Redis channel 'gex2'")
+            logger.info(f"Published new data for {ticker} to Redis channel 'gex2'")
 
     except Exception as e:
-        print(f"Error in fetch_and_publish_data: {e}")
+        logger.error(f"Error in fetch_and_publish_data: {e}")
     finally:
         await pool.close()
         await redis_conn.aclose()
+
+async def main():
+    """Main function to run the script."""
+    try:
+        await fetch_and_publish_data()
+    except Exception as e:
+        logger.error(f"Main error: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
