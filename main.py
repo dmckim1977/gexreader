@@ -37,25 +37,26 @@ async def get_latest_records(pool):
     """Fetch the latest record for each ticker from PostgreSQL."""
     try:
         async with pool.acquire() as conn:
-            query = """
-                SELECT ticker, timestamp, expiration, spot, zero_gamma, 
-                       major_pos_vol, major_neg_vol,  -- Fixed: Added comma between major_pos_vol and major_neg_vol
-                       sum_gex_vol
-                FROM livegex_gex
-                WHERE (ticker, timestamp) IN (
-                    SELECT ticker, MAX(timestamp) 
-                    FROM livegex_gex 
-                    GROUP BY ticker
-                )
-                AND expiration >= $1
-                AND spot > 0
-                AND zero_gamma > 0
-                AND major_pos_vol > 0
-                AND major_neg_vol > 0
-            """
-            today = date.today()
-            async for row in await conn.cursor(query, today):
-                yield row
+            async with conn.transaction():  # Start a transaction for the cursor
+                query = """
+                    SELECT ticker, timestamp, expiration, spot, zero_gamma, 
+                           major_pos_vol, major_neg_vol, 
+                           sum_gex_vol
+                    FROM livegex_gex
+                    WHERE (ticker, timestamp) IN (
+                        SELECT ticker, MAX(timestamp) 
+                        FROM livegex_gex 
+                        GROUP BY ticker
+                    )
+                    AND expiration >= $1
+                    AND spot > 0
+                    AND zero_gamma > 0
+                    AND major_pos_vol > 0
+                    AND major_neg_vol > 0
+                """
+                today = date.today()
+                async for row in await conn.cursor(query, today):
+                    yield row
     except Exception as e:
         print(f"Error fetching latest records: {e}")
         raise
