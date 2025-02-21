@@ -42,11 +42,13 @@ async def generate_fake_data():
                 key: value + random.uniform(-10, 10) for key, value in base_values.items()
             }
 
+            tickers = ["SPX", "SPY"]
+
             # Create the fake data message with msg_type
             fake_data = {
                 "msg_type": "gex1",  # Add message type to indicate fake data
                 "data": {"timestamp": current_time,
-                    "ticker": "SPX",
+                    "ticker": random.choice(tickers),
                     "expiration": "zero",
                     "spot": jittered_values["spot"],
                     "zero_gamma": jittered_values["zero_gamma"],
