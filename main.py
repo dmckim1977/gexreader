@@ -43,29 +43,28 @@ async def get_latest_records(pool):
     """Fetch the latest record for each ticker from PostgreSQL."""
     try:
         async with pool.acquire() as conn:
-            async with conn.transaction():  # Start a transaction for the cursor
-                query = """
-                    SELECT ticker, timestamp, expiration, spot, zero_gamma, 
-                           major_pos_vol, major_neg_vol, 
-                           sum_gex_vol
-                    FROM livegex_gex
-                    WHERE (ticker, timestamp) IN (
-                        SELECT ticker, MAX(timestamp) 
-                        FROM livegex_gex 
-                        GROUP BY ticker
-                    )
-                    AND expiration >= $1
-                    AND spot > 0
-                    AND zero_gamma > 0
-                    AND major_pos_vol > 0
-                    AND major_neg_vol > 0
-                """
-                today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
-                logger.info(f"Executing query with today = {today}")
-                async with await conn.cursor(query, today) as cursor:  # Use cursor as a context manager
-                    async for row in cursor:  # Iterate over the cursor directly
-                        logger.info(f"Found record for ticker: {row[1]}")
-                        yield row
+            query = """
+                SELECT ticker, timestamp, expiration, spot, zero_gamma, 
+                       major_pos_vol, major_neg_vol, 
+                       sum_gex_vol
+                FROM livegex_gex
+                WHERE (ticker, timestamp) IN (
+                    SELECT ticker, MAX(timestamp) 
+                    FROM livegex_gex 
+                    GROUP BY ticker
+                )
+                AND expiration >= $1
+                AND spot > 0
+                AND zero_gamma > 0
+                AND major_pos_vol > 0
+                AND major_neg_vol > 0
+            """
+            today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
+            logger.info(f"Executing query with today = {today}")
+            rows = await conn.fetch(query, today)  # Use fetch() to get all matching rows
+            for row in rows:
+                logger.info(f"Found record for ticker: {row['ticker']}")
+                yield row
     except Exception as e:
         logger.error(f"Error fetching latest records: {e}")
         raise
@@ -92,10 +91,10 @@ async def check_new_records(pool, last_timestamps):
                     """
                     today = date.today().isoformat()  # Convert date to string in 'YYYY-MM-DD' format
                     logger.debug(f"Checking for new records for ticker {ticker}, last timestamp: {last_timestamp}, today: {today}")
-                    row = await conn.fetchrow(query, ticker, last_timestamp, today)
+                    row = await conn.fetchrow(query, ticker, last_timestamp, today)  # Use fetchrow() for a single row
                     if row:
                         logger.info(f"Found new record for ticker {ticker}")
-                        last_timestamps[ticker] = row[0]  # Update last timestamp
+                        last_timestamps[ticker] = row['timestamp']  # Update last timestamp using column name
                         yield row
             await asyncio.sleep(5)  # Check every 5 seconds
         except Exception as e:
@@ -114,17 +113,17 @@ async def fetch_and_publish_data():
         # Get and publish initial latest records for each ticker
         logger.info("Starting to fetch and publish initial latest records")
         async for row in get_latest_records(pool):
-            ticker = row[1]  # ticker is at index 1 in the row
-            last_timestamps[ticker] = row[0]  # timestamp is at index 0
+            ticker = row['ticker']  # Access by column name instead of index
+            last_timestamps[ticker] = row['timestamp']  # Access by column name
             data = {
-                'timestamp': row[0].isoformat(),
-                'ticker': row[1],
-                'expiration': row[2],
-                'spot': float(row[3]),
-                'zero_gamma': float(row[4]),
-                'major_pos_vol': float(row[5]),
-                'major_neg_vol': float(row[6]),
-                'sum_gex_vol': float(row[7])
+                'timestamp': row['timestamp'].isoformat(),
+                'ticker': row['ticker'],
+                'expiration': row['expiration'],
+                'spot': float(row['spot']),
+                'zero_gamma': float(row['zero_gamma']),
+                'major_pos_vol': float(row['major_pos_vol']),
+                'major_neg_vol': float(row['major_neg_vol']),
+                'sum_gex_vol': float(row['sum_gex_vol'])
             }
             event_id = f"gex2:{datetime.now().isoformat()}"  # Match SSE event ID format
             message_data = json.dumps(data)
@@ -134,17 +133,17 @@ async def fetch_and_publish_data():
         # Continuously check for new records every 5 seconds
         logger.info("Starting to check for new records every 5 seconds")
         async for row in check_new_records(pool, last_timestamps):
-            ticker = row[1]
-            last_timestamps[ticker] = row[0]  # Update last timestamp
+            ticker = row['ticker']
+            last_timestamps[ticker] = row['timestamp']  # Update last timestamp
             data = {
-                'timestamp': row[0].isoformat(),
-                'ticker': row[1],
-                'expiration': row[2],
-                'spot': float(row[3]),
-                'zero_gamma': float(row[4]),
-                'major_pos_vol': float(row[5]),
-                'major_neg_vol': float(row[6]),
-                'sum_gex_vol': float(row[7])
+                'timestamp': row['timestamp'].isoformat(),
+                'ticker': row['ticker'],
+                'expiration': row['expiration'],
+                'spot': float(row['spot']),
+                'zero_gamma': float(row['zero_gamma']),
+                'major_pos_vol': float(row['major_pos_vol']),
+                'major_neg_vol': float(row['major_neg_vol']),
+                'sum_gex_vol': float(row['sum_gex_vol'])
             }
             event_id = f"gex2:{datetime.now().isoformat()}"  # Match SSE event ID format
             message_data = json.dumps(data)
