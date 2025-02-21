@@ -54,6 +54,8 @@ async def generate_fake_data():
                     "major_neg_vol": jittered_values["major_neg_vol"],
                     "sum_gex_vol": jittered_values["sum_gex_vol"]
                 },
+                "trades": {},
+                "strikes": {},
             }
 
             # Publish to Redis Pub/Sub channel 'gex2'
