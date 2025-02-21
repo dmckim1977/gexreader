@@ -44,7 +44,7 @@ async def generate_fake_data():
 
             # Create the fake data message with msg_type
             fake_data = {
-                "msg_type": "fake_data",  # Add message type to indicate fake data
+                "msg_type": "gex1",  # Add message type to indicate fake data
                 "data": {"timestamp": current_time,
                     "ticker": "SPX",
                     "expiration": "zero",
