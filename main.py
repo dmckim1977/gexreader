@@ -141,16 +141,20 @@ async def fetch_and_publish_data():
             ticker = row['ticker']
             last_timestamps[ticker] = row['timestamp']  # Update last timestamp
             data = {
-                'timestamp': row['timestamp'].isoformat(),
-                'ticker': row['ticker'],
-                'expiration': row['expiration'],
-                'spot': float(row['spot']),
-                'zero_gamma': float(row['zero_gamma']),
-                'major_pos_vol': float(row['major_pos_vol']),
-                'major_neg_vol': float(row['major_neg_vol']),
-                'sum_gex_vol': float(row['sum_gex_vol'])
+                "msg_type": "gex2",  # Add message type to indicate fake data
+                "data": {"timestamp": row['timestamp'].isoformat(),
+                    "ticker": row['ticker'],
+                    "expiration": row['expiration'],
+                    "spot": float(row['spot']),
+                    "zero_gamma": float(row['zero_gamma']),
+                    "major_pos_vol": float(row['major_pos_vol']),
+                    "major_neg_vol": float(row['major_neg_vol']),
+                    "sum_gex_vol": float(row['sum_gex_vol'])
+                },
+                "trades": {},
+                "strikes": {},
             }
-            event_id = f"gex2:{datetime.now().isoformat()}"  # Match SSE event ID format
+            data['event_id'] = f"gex2:{datetime.now().isoformat()}"  # Match SSE event ID format
             message_data = json.dumps(data)
             await redis_conn.publish('gex2', message_data)
             logger.info(f"Published new data for {ticker} to Redis channel 'gex2'")
