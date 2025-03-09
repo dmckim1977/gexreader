@@ -1,6 +1,6 @@
 [project]
-name = "gex-reader"
-version = "0.1.0"
-description = "Add your description here"
+name = "gexray"
+version = "0.0.3"
+description = "Visualizing Gex and other options data real-time."
 requires-python = ">=3.12"
 dependencies = []
