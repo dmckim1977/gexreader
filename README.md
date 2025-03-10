@@ -9,39 +9,41 @@ The entire legacy process will be deprecated in steps. Marketlizards will be dep
 
 ## Gexray Legacy
 
-[SSE Endpoint](https://sse.sweet-forest-e367.workers.dev/sse/gexray)  
+[Readme](private_readme.md)
+
+[SSE Endpoint] [Readme](private_readme.md)
 SSE Message Type: `{"msg_type": "gex2"}`  
 Redis Pubsub Channel: `gex2`  
-[Message Viewer](https://wallstjesus.info/sse/gexray_viewer)  
+[Message Viewer] [Readme](private_readme.md)
 
 Marketlizards process:
 1. Celery task reads from API
-2. Saves to redis pubsub (marketlizards.com)
+2. Saves to redis pubsub (marketlizards)
 3. Saves to tsdb
-4. Serves to secure websocket (marketlizards.com)
+4. Serves to secure websocket (marketlizards)
 
 Wallstjesus Process:
 1. Reads from tsdb (gexreader2)
 2. Serves to redis pubsub (gexreader2)
-3. Serves to SSE (wallstjesus.info)
+3. Serves to SSE (wallstjesus)
 
 ## Gexray v2
 
-[SSE Endpoint](https://sse.sweet-forest-e367.workers.dev/sse/gexray)  
+[SSE Endpoint] [Readme](private_readme.md)
 SSE Message Type: `{"msg_type": "gex3"}`  
 Redis Pubsub Channel: `gex2`  
-Server: `wallstjesus.info`  
+Server: `wallstjesus`  
 Script location: `/apps/gexreader/gexray3_db_to_sse`  
-[Message Viewer](https://wallstjesus.info/sse/gexray_viewer)
+[Message Viewer] [Readme](private_readme.md)
 
 1. Reads from snapshot, processes data and saves to `api` database.  (create_index_naive_gex).  
 2. Reads from api database `gex3` and saves to redis pubsub (gexrayreader3).  
-3. Serves from pubsub to SSE endpoint (wallstjesus.info)
+3. Serves from pubsub to SSE endpoint (wallstjesus)
 
 ## Roadmap
 
 ### Gexray Legacy
-- Deprecate marketlizards.com websocket. 
+- Deprecate marketlizards websocket. 
 - Deprecate this whole project once Gexray3 is stable.
 - Add v2 module to calculate naive gex for stocks and non-0DTE. 
 - Add ticker list for v2 modules instead of dynamically getting tickers for now. 
