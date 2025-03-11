@@ -34,4 +34,4 @@ ENV PYTHONUNBUFFERED=1
 ENTRYPOINT []
 
 # Run the script - update this to your actual script name
-CMD ["uv", "run", "gexreader3.py"]
+CMD ["uv", "run", "gexreader3_agg.py"]
