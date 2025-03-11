@@ -179,7 +179,7 @@ class GexrayReader3:
                             )
                           AND spot_open \
                             > 0
-                          AND zero_gamma \
+                          AND zero_gamma_avg \
                             > 0 \
                         """
                 rows = await conn.fetch(query)
@@ -215,7 +215,7 @@ class GexrayReader3:
                                     > $2
                                   AND spot_open \
                                     > 0
-                                  AND zero_gamma \
+                                  AND zero_gamma_avg \
                                     > 0
                                 ORDER BY time DESC
                                     LIMIT 1 \
