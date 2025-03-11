@@ -224,7 +224,7 @@ class GexrayReader3:
                         row = await conn.fetchrow(query, ticker, last_timestamp)
                         if row:
                             logger.info(f"Found new record for ticker {ticker}")
-                            self._last_timestamps[ticker] = row['timestamp']
+                            self._last_timestamps[ticker] = row['time']
                             yield row
                 await asyncio.sleep(SLEEP_TIME)  # Check every SLEEP_TIME seconds
             except Exception as e:
@@ -293,7 +293,7 @@ class GexrayReader3:
             logger.info("Starting to fetch and publish initial latest records from gexray3")
             async for row in self.get_latest_records():
                 ticker = row['ticker']
-                self._last_timestamps[ticker] = row['timestamp']
+                self._last_timestamps[ticker] = row['time']
                 await self.publish_record(row, is_initial=True)
 
             # Continuously check for new records
