@@ -44,9 +44,8 @@ Script location: `/apps/gexreader/gexray3_db_to_sse`
 
 ### Gexray Legacy
 - Deprecate marketlizards websocket. 
-- Deprecate this whole project once Gexray3 is stable.
-- Add v2 module to calculate naive gex for stocks and non-0DTE. 
-- Add ticker list for v2 modules instead of dynamically getting tickers for now. 
+- Deprecate the whole legacy project once Gexray3 is stable.
+- Add logic for Holidays to 0DTE expirations. 
 
 # Changelog
 
@@ -59,6 +58,9 @@ Script location: `/apps/gexreader/gexray3_db_to_sse`
 - db_to_sse: Added module documentation. 
 - db_to_sse: Moved some variables to module attributes. 
 - Moved all related scripts under wallstjesus:gexreader
+- Added v2 module to calculate naive gex for stocks and non-0DTE. 
+- Added logic for Holidays for weekly expirations. 
+- Added dynamic ticker api for chart select query. 
 
 
 ===================================================
