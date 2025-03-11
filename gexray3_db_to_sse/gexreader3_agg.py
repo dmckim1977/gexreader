@@ -169,7 +169,6 @@ class GexrayReader3:
                         spot_high as high,
                         spot_low as low,
                         spot_close as close, 
-                        strikes
                         FROM gexray3_minute_agg_view
                         WHERE (ticker \
                             , time) IN (
@@ -210,7 +209,6 @@ class GexrayReader3:
                                     spot_high,
                                     spot_low,
                                     spot_close, 
-                                    strikes
                                     FROM gexray3_minute_agg_view
                                 WHERE ticker = $1
                                   AND time \
@@ -261,25 +259,13 @@ class GexrayReader3:
                     "minor_pos": [row['time'].isoformat(), float(row['minor_pos'])],
                     "minor_neg": [row['time'].isoformat(), float(row['minor_neg'])],
                 },
-                # Parse JSON fields from database
-                "trades": json.loads(row['trades']) if row['trades'] else [],
-                "strikes": json.loads(row['strikes']) if row['strikes'] else []
-            }
-            strikes_data = {
-                "msg_type": "strikes",
-                "ticker": ticker,
-                "time": row['time'].isoformat(),
-                "strike": [item[0] for item in row['strikes']],
-                "total_gex": [item[3] for item in row['strikes']],
             }
 
             data['event_id'] = f"{GEX_CHANNEL}:{datetime.now().isoformat()}"
             message_data = json.dumps(data)
-            strikes_message_data = json.dumps(strikes_data)
 
             # Publish to the gex channel
             await self.redis_conn.publish(GEX_CHANNEL, message_data)
-            await self.redis_conn.publish(GEX_CHANNEL, strikes_message_data)
 
             record_type = "initial" if is_initial else "new"
             logger.info(f"Published {record_type} data for {ticker} to Redis channel {GEX_CHANNEL}")
