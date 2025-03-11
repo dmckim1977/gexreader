@@ -9,14 +9,11 @@ import signal
 from datetime import datetime, timedelta
 import asyncpg
 import httpx
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
-import py_vollib.black_scholes_merton.implied_volatility
 import py_vollib_vectorized
-import redis.asyncio as redis
 from dotenv import load_dotenv
+from pandas_market_calendars import get_calendar
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -376,13 +373,52 @@ async def insert_to_database(pool, data):
         raise
 
 
+def get_next_options_expiration(current_date: datetime) -> datetime:
+    """Returns the next stock options expiration date (Friday at 4:00 PM ET), adjusting for holidays."""
+    ny_timezone = pytz.timezone('America/New_York')
+    nyse = get_calendar('NYSE')  # NYSE calendar for U.S. stock/options holidays
+
+    # Ensure current_date is timezone-aware
+    if current_date.tzinfo is None:
+        current_date = ny_timezone.localize(current_date)
+
+    # Get NYSE trading days (valid schedule) for a reasonable range
+    start_date = current_date.date()
+    end_date = (current_date + timedelta(days=14)).date()  # Look 2 weeks ahead
+    schedule = nyse.valid_days(start_date=start_date, end_date=end_date)
+    holidays = nyse.holidays().holidays
+
+    # If today is Friday and not a holiday, use today
+    if current_date.weekday() == 4:  # Friday
+        if current_date.date() not in holidays:
+            return current_date.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    # Find the next Friday
+    days_ahead = 4 - current_date.weekday()  # 4 is Friday (Monday=0, Sunday=6)
+    if days_ahead <= 0:  # If today is Friday or after, go to next week
+        days_ahead += 7
+    next_friday = current_date + timedelta(days=days_ahead)
+    next_friday = next_friday.replace(hour=16, minute=0, second=0, microsecond=0)
+    if next_friday.tzinfo is None:
+        next_friday = ny_timezone.localize(next_friday)
+
+    # Adjust if next Friday is a holiday (e.g., Good Friday)
+    while next_friday.date() in holidays:
+        # Move to the previous trading day (typically Thursday)
+        next_friday -= timedelta(days=1)
+        # Ensure it’s a valid trading day
+        while next_friday.date() not in schedule:
+            next_friday -= timedelta(days=1)
+
+    return next_friday
+
+
 async def run(
         ticker: str,
         risk_free_rate: float,
         t: float,
         exp_to_use: datetime,
         pool,
-        redis_conn = None,
 ):
     try:
         # Get option data
@@ -435,10 +471,6 @@ async def run(
         strikes = sorted_gex[(sorted_gex['strike'] > min_price) & (sorted_gex['strike'] < max_price)]
         strikes_list = strikes.values.tolist()
 
-        # Standardize ticker
-        root = "SPX" if ticker == "SPXW" else ticker
-        root = "VIX" if ticker == "VIXW" else ticker
-
         # Prepare data for insertion
         data = {
             "msg_type": "gex3",
@@ -460,10 +492,6 @@ async def run(
 
         # Save to database
         await insert_to_database(pool, data)
-
-        # # Publish to Redis
-        # if redis_conn is not None:
-        #     await publish_to_redis(redis_conn, data, ticker)
 
         logger.info(f"Successfully processed data for {ticker}")
 
@@ -487,21 +515,24 @@ async def main():
                 lambda: asyncio.create_task(shutdown(pool))
             )
 
-        # Register signal handlers for graceful shutdown - FIXED THIS PART
-        loop = asyncio.get_running_loop()
-        for sig_name in ('SIGINT', 'SIGTERM'):
-            loop.add_signal_handler(
-                getattr(signal, sig_name),  # Use signal module directly
-                lambda: asyncio.create_task(shutdown(pool))
-            )
-
         # Get current NY time
         ny_timezone = pytz.timezone('America/New_York')
         ny_now = datetime.now(ny_timezone)
-        expo_to_use = ny_now
+
+        # Check if today is a holiday and skip if it is
+        nyse = get_calendar('NYSE')
+        holidays = nyse.holidays().holidays
+        if ny_now.date() in holidays:
+            logger.info(f"Today ({ny_now.date()}) is a market holiday. Skipping execution.")
+            await shutdown(pool)
+            return
+
+        # Get next options expiration
+        next_expiration = get_next_options_expiration(ny_now)
+        logger.info(f"Next expiration: {next_expiration}")
 
         # Calculate time until next market close (4:00 PM)
-        next_close = expo_to_use.replace(hour=16, minute=0, second=0, microsecond=0)
+        next_close = next_expiration.replace(hour=16, minute=0, second=0, microsecond=0)
         if ny_now > next_close:
             # If we're past closing time, use next business day
             next_close += timedelta(days=1)
@@ -509,14 +540,11 @@ async def main():
             if next_close.weekday() >= 5:  # Saturday (5) or Sunday (6)
                 next_close += timedelta(days=7 - next_close.weekday())
 
-        dte_days = (next_close - expo_to_use).total_seconds() / (24 * 60 * 60)
-        time_to_expiration = dte_days / 262  # Annualized based on ~262 trading days per year
-
-        logger.info(f'Time to expiration: {time_to_expiration:.6f} years ({dte_days:.2f} days)')
-
         rfr = 0.05  # Risk-free rate
-        # ticker = "SPXW"  # Default ticker
-        ticker_list = ['SPXW', 'QQQ', 'SPY', 'IWM']
+        ticker_list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'TLT', 'HYG', 'GLD', 'VXX']
+
+        # Convert next_close to int_date
+        expo_to_use = next_close.strftime("%Y%m%d")
 
         # Run continuously until stopped
         while True:
@@ -525,15 +553,6 @@ async def main():
             # Update time to expiration based on current time
             ny_now = datetime.now(ny_timezone)
             dte_days = (next_close - ny_now).total_seconds() / (24 * 60 * 60)
-            if dte_days < 0:
-                # We've passed the market close, recalculate for next day
-                expo_to_use = ny_now
-                next_close = expo_to_use.replace(hour=16, minute=0, second=0, microsecond=0)
-                if ny_now > next_close:
-                    next_close += timedelta(days=1)
-                    if next_close.weekday() >= 5:
-                        next_close += timedelta(days=7 - next_close.weekday())
-                dte_days = (next_close - expo_to_use).total_seconds() / (24 * 60 * 60)
 
             time_to_expiration = max(0, dte_days) / 262  # Ensure non-negative
 
@@ -543,14 +562,13 @@ async def main():
                     ticker=ticker,
                     risk_free_rate=rfr,
                     t=time_to_expiration,
-                    exp_to_use=expo_to_use,
+                    exp_to_use=next_close,
                     pool=pool,
                 )
 
             # Calculate processing time and adjust sleep
             processing_time = time.time() - start_time
             sleep_time = max(0, 5 - processing_time)  # Target 5-second cycle
-            logger.info(f"Cycle completed in {processing_time:.2f}s, sleeping for {sleep_time:.2f}s")
 
             await asyncio.sleep(sleep_time)
 
@@ -562,8 +580,6 @@ async def main():
         # Ensure connections are closed
         if 'pool' in locals():
             await pool.close()
-        # if 'redis_conn' in locals():
-        #     await redis_conn.aclose()
 
 
 async def shutdown(pool):
@@ -581,8 +597,6 @@ async def shutdown(pool):
     # Close connections
     if pool:
         await pool.close()
-    # if redis_conn:
-    #     await redis_conn.aclose()
 
     logger.info("Shutdown complete")
 
