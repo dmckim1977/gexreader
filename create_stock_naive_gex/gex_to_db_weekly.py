@@ -286,8 +286,8 @@ def find_zero_gamma(gamma_df):
 
 
 def calculate_gamma_profile(dataframe, dte, risk_free_rate=0.05,
-                            strike_range=0.05, num_levels=100,
-                            title="Gamma Exposure Profile"):
+                            strike_range=0.1, num_levels=100,
+                            title="Gamma Exposure Profile", ticker=None):
     """
     Calculate gamma profile and plot it.
 
@@ -420,6 +420,7 @@ async def run(
         exp_to_use: datetime,
         pool,
 ):
+    logger.info('Entering run function')
     try:
         # Get option data
         df = await get_snapshot(ticker, int(exp_to_use.strftime("%Y%m%d")))
@@ -459,8 +460,8 @@ async def run(
             merged,
             dte=t,
             risk_free_rate=risk_free_rate,
-            strike_range=0.05,  # ±5% from current price
-            title=title
+            strike_range=0.10,  # ±5% from current price
+            title=title,
         )
 
         if zero_gamma is None or underlying_price is None:
@@ -471,15 +472,18 @@ async def run(
         strikes = sorted_gex[(sorted_gex['strike'] > min_price) & (sorted_gex['strike'] < max_price)]
         strikes_list = strikes.values.tolist()
 
+        # Standardize ticker
+        root = ticker
+
         # Prepare data for insertion
         data = {
             "msg_type": "gex3",
             "data": {
                 "timestamp": ny_now.isoformat(),
                 "ticker": root,
-                "expiration": "zero",
+                "expiration": 'zero',
                 "spot": float(underlying_price),
-                "zero_gamma": float(zero_gamma),
+                "zero_gamma": float(zero_gamma) if zero_gamma is not None else None,  # Fallback to current price
                 "major_pos_vol": float(sorted_gex['strike'].iloc[0]) if not sorted_gex.empty else 0,
                 "major_neg_vol": float(sorted_gex['strike'].iloc[-1]) if not sorted_gex.empty else 0,
                 "sum_gex_vol": float(gex['total_gex'].sum()) if not gex.empty else 0,
@@ -499,6 +503,9 @@ async def run(
 
     except Exception as e:
         logger.error(f"Error in run function: {e}")
+        # Print stack trace for debugging
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 
