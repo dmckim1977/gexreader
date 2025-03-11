@@ -165,10 +165,10 @@ class GexrayReader3:
                         sum_gex_vol_avg as volume, 
                         minor_pos_vol_avg as minor_pos, 
                         minor_neg_vol_avg as minor_neg,
-                        spot_open as open,
-                        spot_high as high,
-                        spot_low as low,
-                        spot_close as close
+                        spot_open,
+                        spot_high,
+                        spot_low,
+                        spot_close
                         FROM gexray3_minute_agg_view
                         WHERE (ticker \
                             , time) IN (
