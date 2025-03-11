@@ -548,7 +548,7 @@ async def main():
                 next_close += timedelta(days=7 - next_close.weekday())
 
         rfr = 0.05  # Risk-free rate
-        ticker_list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'TLT', 'HYG', 'GLD', 'VXX', 'PLTR']
+        ticker_list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'VXX', 'PLTR', 'COIN']
 
         # Convert next_close to int_date
         expo_to_use = next_close.strftime("%Y%m%d")

@@ -248,16 +248,16 @@ class GexrayReader3:
                 "ticker": ticker,
                 "data": {
                     "candles": [
-                        row['time'].isoformat(),
+                        row['time'].timestamp(),
                     float(row['spot_open']),
                     float(row['spot_high']),
                     float(row['spot_low']),
                     float(row['spot_close']),],
-                    "major_pos": [row['time'].isoformat(), float(row['major_pos'])],
-                    "major_neg": [row['time'].isoformat(), float(row['major_neg'])],
-                    "zero_gamma": [row['time'].isoformat(), float(row['zero_gamma'])],
-                    "minor_pos": [row['time'].isoformat(), float(row['minor_pos'])],
-                    "minor_neg": [row['time'].isoformat(), float(row['minor_neg'])],
+                    "major_pos": [row['time'].timestamp(), float(row['major_pos'])],
+                    "major_neg": [row['time'].timestamp(), float(row['major_neg'])],
+                    "zero_gamma": [row['time'].timestamp(), float(row['zero_gamma'])],
+                    "minor_pos": [row['time'].timestamp(), float(row['minor_pos'])],
+                    "minor_neg": [row['time'].timestamp(), float(row['minor_neg'])],
                 },
             }
 
