@@ -168,7 +168,7 @@ class GexrayReader3:
                         spot_open as open,
                         spot_high as high,
                         spot_low as low,
-                        spot_close as close, 
+                        spot_close as close
                         FROM gexray3_minute_agg_view
                         WHERE (ticker \
                             , time) IN (
@@ -208,7 +208,7 @@ class GexrayReader3:
                                     spot_open,
                                     spot_high,
                                     spot_low,
-                                    spot_close, 
+                                    spot_close
                                     FROM gexray3_minute_agg_view
                                 WHERE ticker = $1
                                   AND time \
