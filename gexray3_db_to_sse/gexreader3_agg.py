@@ -177,7 +177,7 @@ class GexrayReader3:
                             FROM gexray3_minute_agg_view
                             GROUP BY ticker
                             )
-                          AND spot \
+                          AND spot_open \
                             > 0
                           AND zero_gamma \
                             > 0 \
