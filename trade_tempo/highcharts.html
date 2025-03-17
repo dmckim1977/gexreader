@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Premium Bar Charts</title>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        #container { height: 600px; width: 800px; margin: 20px auto; }
+        #slider-container { text-align: center; margin: 20px; }
+        #log { margin: 20px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="slider-container">
+        <label for="bar-count">Number of Bars: <span id="bar-value">30</span></label>
+        <input type="range" id="bar-count" min="10" max="60" value="30" step="1">
+    </div>
+    <div id="container"></div>
+    <pre id="log"></pre>
+
+    <script>
+        const log = document.getElementById('log');
+        function logMessage(message) {
+            log.textContent += message + '\n';
+            console.log(message);
+        }
+
+        const chart = Highcharts.chart('container', {
+            chart: { type: 'bar', animation: true },
+            title: { text: 'Real-Time Option Premiums' },
+            xAxis: { title: { text: 'Premium Value' } },
+            yAxis: { title: { text: 'Time (UTC)' }, categories: [], reversed: true },
+            plotOptions: { bar: { dataLabels: { enabled: true } }, series: { stacking: 'normal' } },
+            series: [
+                { name: 'Call Bought', data: [], color: '#00FF00' },
+                { name: 'Call Sold', data: [], color: '#FF0000' },
+                { name: 'Put Bought', data: [], color: '#0000FF' },
+                { name: 'Put Sold', data: [], color: '#FFA500' }
+            ],
+            legend: { enabled: true }
+        });
+
+        let maxBars = 30;
+        const timestamps = [];
+        const data = { call_premium_bought: [], call_premium_sold: [], put_premium_bought: [], put_premium_sold: [] };
+
+        const ws = new WebSocket('ws://localhost:8000/premium');
+        ws.onopen = () => logMessage('WebSocket connected');
+        ws.onmessage = (event) => {
+            try {
+                const newData = JSON.parse(event.data);
+                logMessage(`Received ${newData.length} seconds of data`);
+                newData.forEach(row => {
+                    const time = row.time;
+                    if (!timestamps.includes(time)) {
+                        timestamps.unshift(time);
+                        data.call_premium_bought.unshift(row.call_premium_bought);
+                        data.call_premium_sold.unshift(row.call_premium_sold);
+                        data.put_premium_bought.unshift(row.put_premium_bought);
+                        data.put_premium_sold.unshift(row.put_premium_sold);
+
+                        if (timestamps.length > maxBars) {
+                            timestamps.pop();
+                            data.call_premium_bought.pop();
+                            data.call_premium_sold.pop();
+                            data.put_premium_bought.pop();
+                            data.put_premium_sold.pop();
+                        }
+
+                        chart.yAxis[0].setCategories(timestamps);
+                        chart.series[0].setData(data.call_premium_bought);
+                        chart.series[1].setData(data.call_premium_sold);
+                        chart.series[2].setData(data.put_premium_bought);
+                        chart.series[3].setData(data.put_premium_sold);
+                    }
+                });
+            } catch (e) {
+                logMessage(`Parse error: ${e.message}`);
+            }
+        };
+        ws.onerror = (error) => logMessage(`WebSocket error: ${JSON.stringify(error)}`);
+        ws.onclose = (event) => logMessage(`WebSocket closed: code=${event.code}, reason=${event.reason}`);
+
+        $('#bar-count').on('input', function() {
+            maxBars = parseInt(this.value);
+            $('#bar-value').text(maxBars);
+            while (timestamps.length > maxBars) {
+                timestamps.pop();
+                data.call_premium_bought.pop();
+                data.call_premium_sold.pop();
+                data.put_premium_bought.pop();
+                data.put_premium_sold.pop();
+            }
+            chart.yAxis[0].setCategories(timestamps);
+            chart.series[0].setData(data.call_premium_bought);
+            chart.series[1].setData(data.call_premium_sold);
+            chart.series[2].setData(data.put_premium_bought);
+            chart.series[3].setData(data.put_premium_sold);
+        });
+    </script>
+</body>
+</html>

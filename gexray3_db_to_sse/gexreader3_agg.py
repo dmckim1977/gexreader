@@ -258,6 +258,7 @@ class GexrayReader3:
                     "zero_gamma": [row['time'].timestamp(), float(row['zero_gamma'])],
                     "minor_pos": [row['time'].timestamp(), float(row['minor_pos'])],
                     "minor_neg": [row['time'].timestamp(), float(row['minor_neg'])],
+                    "volume": [row['time'].timestamp(), float(row['volume'])],
                 },
             }
 

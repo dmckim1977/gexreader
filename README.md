@@ -45,9 +45,16 @@ Script location: `/apps/gexreader/gexray3_db_to_sse`
 ### Gexray Legacy
 - Deprecate marketlizards websocket. 
 - Deprecate the whole legacy project once Gexray3 is stable.
-- Add logic for Holidays to 0DTE expirations. 
+- Add logic for Holidays to 0DTE expirations.
 
 # Changelog
+
+## v2025.3.17
+
+### Added or changed
+
+- Added volume to gexray3_db_to_sse endpoint
+- Changed versioning from semantic to date based
 
 ## v0.0.3
 
