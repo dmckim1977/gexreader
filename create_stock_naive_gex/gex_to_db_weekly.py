@@ -448,7 +448,15 @@ async def run(
         gex = calculate_gex(merged)
         sorted_gex = gex.sort_values(by="total_gex", ascending=False)
         sorted_gex['strike'] = sorted_gex['strike'] / 1000
-        sorted_gex.to_csv('sorted_gex.csv')
+
+        # Get IV data by strike for calls and puts
+        iv_by_strike = {}
+        for right in ['C', 'P']:
+            for _, row in merged[merged['right'] == right].iterrows():
+                strike = row['strike'] / 1000  # Normalize to match sorted_gex
+                if strike not in iv_by_strike:
+                    iv_by_strike[strike] = {'C': None, 'P': None}
+                iv_by_strike[strike][right] = row['iv']
 
         # Get current NY time
         ny_timezone = pytz.timezone('America/New_York')
@@ -464,36 +472,46 @@ async def run(
             title=title,
         )
 
-        # Merge IV data with the sorted_gex dataframe
-        # First prepare a smaller dataframe with just the columns we need
-        iv_data = merged[['strike', 'right', 'iv']].copy()
-        iv_data['strike'] = iv_data['strike'] / 1000  # Normalize strikes to match sorted_gex
-
-        # Create separate dataframes for call and put IVs
-        call_ivs = iv_data[iv_data['right'] == 'C'][['strike', 'iv']].rename(columns={'iv': 'call_iv'})
-        put_ivs = iv_data[iv_data['right'] == 'P'][['strike', 'iv']].rename(columns={'iv': 'put_iv'})
-
-        # Merge with sorted_gex
-        enhanced_gex = sorted_gex.copy()
-        enhanced_gex = pd.merge(enhanced_gex, call_ivs, on='strike', how='left')
-        enhanced_gex = pd.merge(enhanced_gex, put_ivs, on='strike', how='left')
-
-        # Add exposure data from gamma_df if available
+        # Create exposure lookup dictionary if gamma_df exists
+        exposure_by_level = {}
         if gamma_df is not None:
-            # Create a function to find the closest level in gamma_df for each strike
-            def find_closest_exposure(strike_val):
-                if gamma_df is None:
-                    return None
-                idx = (np.abs(gamma_df['level'] - strike_val)).argmin()
-                return gamma_df['total_gex'].iloc[idx]
+            for _, row in gamma_df.iterrows():
+                exposure_by_level[row['level']] = row['total_gex']
 
-            # Apply the function to each strike
-            enhanced_gex['exposure'] = enhanced_gex['strike'].apply(find_closest_exposure)
-        else:
-            enhanced_gex['exposure'] = float('nan')
+        # Extend each strike's data with IV and exposure
+        enhanced_strikes = []
+        for _, row in sorted_gex.iterrows():
+            strike = row['strike']
 
-        # Now convert to list format for the database
-        enhanced_strikes_list = enhanced_gex.fillna(0).values.tolist()
+            # Base data (what you currently have)
+            strike_data = [
+                float(strike),
+                float(row['call_gex']),
+                float(row['put_gex']),
+                float(row['total_gex'])
+            ]
+
+            # Add call IV
+            call_iv = iv_by_strike.get(strike, {}).get('C', None)
+            strike_data.append(float(call_iv) if call_iv is not None else 0)
+
+            # Add put IV
+            put_iv = iv_by_strike.get(strike, {}).get('P', None)
+            strike_data.append(float(put_iv) if put_iv is not None else 0)
+
+            # Add exposure
+            if gamma_df is not None:
+                # Find closest level
+                closest_level = min(exposure_by_level.keys(), key=lambda x: abs(x - strike))
+                exposure = exposure_by_level[closest_level]
+                strike_data.append(float(exposure))
+            else:
+                strike_data.append(0)
+
+            enhanced_strikes.append(strike_data)
+
+        # Sort by strike price for consistency
+        enhanced_strikes.sort(key=lambda x: x[0])
 
         # Standardize ticker
         root = ticker
@@ -514,7 +532,7 @@ async def run(
                 "minor_neg_vol": float(sorted_gex['strike'].iloc[-2]) if len(sorted_gex) > 1 else 0,
             },
             "trades": [],
-            "strikes": enhanced_strikes_list,
+            "strikes": enhanced_strikes,
         }
 
         # Save to database
