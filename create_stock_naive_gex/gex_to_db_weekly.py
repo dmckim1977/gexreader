@@ -495,14 +495,6 @@ async def run(
         # Now convert to list format for the database
         enhanced_strikes_list = enhanced_gex.fillna(0).values.tolist()
 
-        if zero_gamma is None or underlying_price is None:
-            logger.error(f"Failed to calculate gamma profile for {ticker}")
-            return
-
-        # Filter strikes within range
-        strikes = sorted_gex[(sorted_gex['strike'] > min_price) & (sorted_gex['strike'] < max_price)]
-        strikes_list = enhanced_strikes_list
-
         # Standardize ticker
         root = ticker
 
@@ -522,7 +514,7 @@ async def run(
                 "minor_neg_vol": float(sorted_gex['strike'].iloc[-2]) if len(sorted_gex) > 1 else 0,
             },
             "trades": [],
-            "strikes": strikes_list,
+            "strikes": enhanced_strikes_list,
         }
 
         # Save to database
