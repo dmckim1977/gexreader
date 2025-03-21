@@ -68,7 +68,7 @@ wheels = [
 
 [[package]]
 name = "gexray"
-version = "0.0.3"
+version = "2025.3.17"
 source = { virtual = "." }
 
 [[package]]

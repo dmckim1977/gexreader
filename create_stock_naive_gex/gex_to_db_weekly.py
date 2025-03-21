@@ -320,7 +320,7 @@ def calculate_gamma_profile(dataframe, dte, risk_free_rate=0.05,
     # Find zero gamma point
     zero_gamma = find_zero_gamma(gamma_df)
 
-    return zero_gamma, underlying_price, min_price, max_price
+    return zero_gamma, underlying_price, min_price, max_price, gamma_df
 
 
 async def connect_to_database():
@@ -456,7 +456,7 @@ async def run(
 
         # Calculate and plot gamma profile
         title = f"{ticker} Gamma Exposure Profile, {ny_now.strftime('%d %b %Y')}"
-        zero_gamma, underlying_price, min_price, max_price = calculate_gamma_profile(
+        zero_gamma, underlying_price, min_price, max_price, gamma_df = calculate_gamma_profile(
             merged,
             dte=t,
             risk_free_rate=risk_free_rate,
@@ -464,13 +464,44 @@ async def run(
             title=title,
         )
 
+        # Merge IV data with the sorted_gex dataframe
+        # First prepare a smaller dataframe with just the columns we need
+        iv_data = merged[['strike', 'right', 'iv']].copy()
+        iv_data['strike'] = iv_data['strike'] / 1000  # Normalize strikes to match sorted_gex
+
+        # Create separate dataframes for call and put IVs
+        call_ivs = iv_data[iv_data['right'] == 'C'][['strike', 'iv']].rename(columns={'iv': 'call_iv'})
+        put_ivs = iv_data[iv_data['right'] == 'P'][['strike', 'iv']].rename(columns={'iv': 'put_iv'})
+
+        # Merge with sorted_gex
+        enhanced_gex = sorted_gex.copy()
+        enhanced_gex = pd.merge(enhanced_gex, call_ivs, on='strike', how='left')
+        enhanced_gex = pd.merge(enhanced_gex, put_ivs, on='strike', how='left')
+
+        # Add exposure data from gamma_df if available
+        if gamma_df is not None:
+            # Create a function to find the closest level in gamma_df for each strike
+            def find_closest_exposure(strike_val):
+                if gamma_df is None:
+                    return None
+                idx = (np.abs(gamma_df['level'] - strike_val)).argmin()
+                return gamma_df['total_gex'].iloc[idx]
+
+            # Apply the function to each strike
+            enhanced_gex['exposure'] = enhanced_gex['strike'].apply(find_closest_exposure)
+        else:
+            enhanced_gex['exposure'] = float('nan')
+
+        # Now convert to list format for the database
+        enhanced_strikes_list = enhanced_gex.fillna(0).values.tolist()
+
         if zero_gamma is None or underlying_price is None:
             logger.error(f"Failed to calculate gamma profile for {ticker}")
             return
 
         # Filter strikes within range
         strikes = sorted_gex[(sorted_gex['strike'] > min_price) & (sorted_gex['strike'] < max_price)]
-        strikes_list = strikes.values.tolist()
+        strikes_list = enhanced_strikes_list
 
         # Standardize ticker
         root = ticker
