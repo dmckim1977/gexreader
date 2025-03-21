@@ -373,8 +373,8 @@ def calculate_gamma_profile(dataframe, dte, risk_free_rate=0.05,
     underlying_price = dataframe['underlying_price'].iloc[0]
 
     # Generate price levels
-    min_price = underlying_price * (1 - strike_range)
-    max_price = underlying_price * (1 + strike_range)
+    min_price = underlying_price * .98
+    max_price = underlying_price * 1.02
     levels = np.linspace(min_price, max_price, num_levels)
 
     # Calculate gamma at each level
