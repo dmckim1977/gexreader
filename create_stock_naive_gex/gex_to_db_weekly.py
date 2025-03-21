@@ -24,6 +24,45 @@ load_dotenv()
 base_url = os.getenv("THETADATA_URL")
 
 
+# Add this near the top of your file, after imports
+class ZeroGammaTracker:
+    def __init__(self, window_size=5):
+        self.window_size = window_size
+        self.history = {}  # Dictionary to track per-ticker history
+
+    def update(self, ticker, zero_gamma, underlying_price):
+        """Update the zero gamma history for a ticker and return a smoothed value"""
+        if zero_gamma is None:
+            return None
+
+        # Initialize history for this ticker if needed
+        if ticker not in self.history:
+            self.history[ticker] = []
+
+        # Add new value
+        self.history[ticker].append(zero_gamma)
+
+        # Keep only window_size most recent values
+        if len(self.history[ticker]) > self.window_size:
+            self.history[ticker].pop(0)
+
+        # If we have enough history, apply smoothing
+        if len(self.history[ticker]) >= 3:
+            # Calculate median (more robust than mean)
+            median_zero_gamma = sorted(self.history[ticker])[len(self.history[ticker]) // 2]
+
+            # If current value deviates too much, use smoothed value
+            if abs(zero_gamma - median_zero_gamma) / underlying_price > 0.02:  # 2% deviation threshold
+                logger.warning(f"Smoothing zero gamma for {ticker} from {zero_gamma} to {median_zero_gamma}")
+                return median_zero_gamma
+
+        return zero_gamma
+
+
+# Create global instance right after class definition
+zero_gamma_tracker = ZeroGammaTracker()
+
+
 # Make HTTP requests asynchronous
 async def get_snapshot(root: str, exp: int) -> pd.DataFrame:
     async with httpx.AsyncClient() as client:
@@ -249,12 +288,7 @@ def calculate_gamma_at_levels(dataframe, levels, dte, risk_free_rate=0.05):
 def find_zero_gamma(gamma_df):
     """
     Find the zero gamma (gamma flip) point from the gamma profile.
-
-    Parameters:
-    gamma_df (pd.DataFrame): DataFrame with level and total_gex columns
-
-    Returns:
-    float or None: Price level where gamma flips from negative to positive, or None if not found
+    Improved version that handles multiple crossings more intelligently.
     """
     if gamma_df is None or len(gamma_df) < 2:
         return None
@@ -268,21 +302,54 @@ def find_zero_gamma(gamma_df):
         logger.warning("Warning: No zero crossing found in gamma profile")
         return None
 
-    # Find zero crossings
+    # Find all zero crossings
     zero_cross_idx = np.where(np.diff(np.sign(gex)))[0]
 
     if len(zero_cross_idx) == 0:
         return None
 
+    # If there are multiple crossings, find the one with the strongest slope
+    # This is generally the most significant crossing
+    if len(zero_cross_idx) > 1:
+        slopes = []
+        for idx in zero_cross_idx:
+            # Calculate absolute slope at crossing
+            slope = abs((gex[idx + 1] - gex[idx]) / (levels[idx + 1] - levels[idx]))
+            slopes.append(slope)
+
+        # Get the crossing with steepest slope
+        max_slope_idx = np.argmax(slopes)
+        idx = zero_cross_idx[max_slope_idx]
+    else:
+        idx = zero_cross_idx[0]
+
     # Get values on either side of the crossing
-    idx = zero_cross_idx[0]
     x1, y1 = levels[idx], gex[idx]
     x2, y2 = levels[idx + 1], gex[idx + 1]
+
+    # Additional safety check for division
+    if abs(y2 - y1) < 1e-10:  # Prevent near-zero division
+        return (x1 + x2) / 2  # Just use midpoint if values are too close
 
     # Linear interpolation to find zero crossing
     zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
 
+    # Sanity check that result is between x1 and x2
+    if not (min(x1, x2) <= zero_gamma <= max(x1, x2)):
+        logger.warning(f"Interpolated zero gamma {zero_gamma} outside bounds [{x1}, {x2}]")
+        return (x1 + x2) / 2  # Fallback to midpoint
+
     return zero_gamma
+
+    # # Get values on either side of the crossing
+    # idx = zero_cross_idx[0]
+    # x1, y1 = levels[idx], gex[idx]
+    # x2, y2 = levels[idx + 1], gex[idx + 1]
+    #
+    # # Linear interpolation to find zero crossing
+    # zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
+    #
+    # return zero_gamma
 
 
 def calculate_gamma_profile(dataframe, dte, risk_free_rate=0.05,
@@ -471,6 +538,17 @@ async def run(
             strike_range=0.10,  # ±5% from current price
             title=title,
         )
+
+        # In your run function, after calculating zero_gamma:
+        if 'prev_zero_gammas' not in globals():
+            globals()['prev_zero_gammas'] = []
+
+        if zero_gamma is not None:
+            # Apply smoothing and get possibly adjusted zero gamma
+            smoothed_zero_gamma = zero_gamma_tracker.update(ticker, zero_gamma, underlying_price)
+
+            # Use the smoothed value
+            zero_gamma = smoothed_zero_gamma
 
         # Create exposure lookup dictionary if gamma_df exists
         exposure_by_level = {}
