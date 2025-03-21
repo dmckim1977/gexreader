@@ -514,7 +514,6 @@ async def run(
         # Calculate GEX
         gex = calculate_gex(merged)
         sorted_gex = gex.sort_values(by="total_gex", ascending=False)
-        sorted_gex['strike'] = sorted_gex['strike'] / 1000
 
         # Get IV data by strike for calls and puts
         iv_by_strike = {}
