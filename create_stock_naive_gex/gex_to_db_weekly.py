@@ -530,6 +530,90 @@ def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
     return zero_gamma, underlying_price, min_price, max_price
 
 
+def find_zero_gamma_from_gex(gex_df, underlying_price):
+    """
+    Find the zero gamma point by calculating the cumulative GEX from the GEX by strike data.
+
+    Parameters:
+    gex_df (pd.DataFrame): DataFrame with 'strike' and 'total_gex' columns (output of calculate_gex)
+    underlying_price (float): Current spot price of the underlying
+
+    Returns:
+    float: The strike price where cumulative GEX crosses zero (zero gamma point)
+    """
+    if gex_df is None or len(gex_df) < 2:
+        logger.warning("Not enough data to calculate zero gamma")
+        return underlying_price
+
+    # Sort by strike
+    gex_df = gex_df.sort_values('strike').copy()
+
+    # Calculate cumulative GEX
+    gex_df['cumulative_gex'] = gex_df['total_gex'].cumsum()
+
+    # Extract strikes and cumulative GEX
+    strikes = gex_df['strike'].values
+    cumulative_gex = gex_df['cumulative_gex'].values
+
+    # Check if there's a zero crossing
+    if np.all(cumulative_gex >= 0) or np.all(cumulative_gex <= 0):
+        logger.warning("No zero crossing found in cumulative GEX")
+        return underlying_price
+
+    # Find where cumulative GEX crosses zero
+    zero_cross_idx = np.where(np.diff(np.sign(cumulative_gex)))[0]
+    if len(zero_cross_idx) == 0:
+        logger.warning("No zero crossing found in cumulative GEX")
+        return underlying_price
+
+    # Take the crossing closest to the underlying price
+    idx = zero_cross_idx[np.argmin(np.abs(strikes[zero_cross_idx] - underlying_price))]
+    x1, y1 = strikes[idx], cumulative_gex[idx]
+    x2, y2 = strikes[idx + 1], cumulative_gex[idx + 1]
+
+    # Linear interpolation to find the exact zero crossing
+    if abs(y2 - y1) < 1e-10:  # Avoid division by near-zero
+        zero_gamma = (x1 + x2) / 2
+    else:
+        zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
+
+    # Ensure the result is within bounds
+    if not (min(x1, x2) <= zero_gamma <= max(x1, x2)):
+        logger.warning(f"Interpolated zero gamma {zero_gamma} outside bounds [{x1}, {x2}]")
+        zero_gamma = (x1 + x2) / 2
+
+    return zero_gamma
+
+
+def calculate_zero_gamma(dataframe, dte, risk_free_rate=0.05, strike_range=0.05):
+    """
+    Calculate zero gamma using GEX at the current spot price.
+
+    Parameters:
+    dataframe (pd.DataFrame): Merged DataFrame with option data
+    dte (float): Days to expiration (annualized)
+    risk_free_rate (float): Risk-free interest rate
+    strike_range (float): Range around current price to analyze (as percentage)
+
+    Returns:
+    tuple: (zero_gamma, underlying_price, min_price, max_price)
+    """
+    # Calculate GEX by strike at the current spot price
+    gex = calculate_gex(dataframe)
+
+    # Get underlying price
+    underlying_price = dataframe['underlying_price'].iloc[0]
+
+    # Find zero gamma
+    zero_gamma = find_zero_gamma_from_gex(gex, underlying_price)
+
+    # Calculate min and max price for strike filtering
+    min_price = underlying_price * (1 - strike_range)
+    max_price = underlying_price * (1 + strike_range)
+
+    return zero_gamma, underlying_price, min_price, max_price
+
+
 async def run(
         ticker: str,
         risk_free_rate: float,
