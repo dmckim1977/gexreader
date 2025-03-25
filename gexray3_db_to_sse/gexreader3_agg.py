@@ -212,7 +212,7 @@ class GexrayReader3:
                                     FROM gexray3_minute_agg_view
                                 WHERE ticker = $1
                                   AND time \
-                                    > $2
+                                    >= $2
                                   AND spot_open \
                                     > 0
                                   AND zero_gamma_avg \
