@@ -2,8 +2,6 @@ import io
 import json
 import logging
 import os
-from typing import Optional
-
 import pytz
 import time
 import asyncio
@@ -16,26 +14,27 @@ import pandas as pd
 import py_vollib_vectorized
 from dotenv import load_dotenv
 from pandas_market_calendars import get_calendar
+from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.optimize import root_scalar
 
 # Configure logging
-logging.basicConfig()
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.WARNING)
 
 load_dotenv()
 
 base_url = os.getenv("THETADATA_URL")
 
-TICKER_LIST: list = ['SPXW', 'QQQ', 'SPY', 'IWM']
-EXPIRATION_TYPE: str = 'zero'  # options 'friday', or 'zero'
+TICKER_LIST: list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'VXX', 'PLTR', 'COIN']
+# TICKER_LIST: list = ['NVDA']
+EXPIRATION_TYPE: str = 'friday'  # options 'friday', or 'zero'
 SLEEP_TIME: int = 30
-RISK_FREE_RATE: float = 0.025
-STRIKE_RANGE: Optional[float] = None
-STRIKE_LEVELS: int = 50
+RISK_FREE_RATE: float = 0.05
+STRIKE_RANGE: float = 0.2
+STRIKE_LEVELS: int = 100  # for exposure calculations
+ZERO_GAMMA_WINDOW_SIZE: int = 10  # window for averaging zero gamma values by ticker
 DAYS_IN_YEAR_DTE: int = 262
-NY_TIMEZONE = pytz.timezone('America/New_York')
-EXPIRATION_DATETIME: Optional[str] = None
-EXPIRATION_INT: Optional[int] = None
 
 
 async def connect_to_database():
@@ -90,11 +89,12 @@ async def insert_to_database(pool, data):
 
 def get_next_options_expiration(current_date: datetime) -> datetime:
     """Returns the next stock options expiration date (Friday at 4:00 PM ET), adjusting for holidays."""
-    nyse = get_calendar('NYSE')
+    ny_timezone = pytz.timezone('America/New_York')
+    nyse = get_calendar('NYSE')  # NYSE calendar for U.S. stock/options holidays
 
     # Ensure current_date is timezone-aware
     if current_date.tzinfo is None:
-        current_date = NY_TIMEZONE.localize(current_date)
+        current_date = ny_timezone.localize(current_date)
 
     # Get NYSE trading days (valid schedule) for a reasonable range
     start_date = current_date.date()
@@ -114,7 +114,7 @@ def get_next_options_expiration(current_date: datetime) -> datetime:
     next_friday = current_date + timedelta(days=days_ahead)
     next_friday = next_friday.replace(hour=16, minute=0, second=0, microsecond=0)
     if next_friday.tzinfo is None:
-        next_friday = NY_TIMEZONE.localize(next_friday)
+        next_friday = ny_timezone.localize(next_friday)
 
     # Adjust if next Friday is a holiday (e.g., Good Friday)
     while next_friday.date() in holidays:
@@ -128,9 +128,6 @@ def get_next_options_expiration(current_date: datetime) -> datetime:
 
 
 async def configure():
-    global EXPIRATION_INT
-    global EXPIRATION_DATETIME
-
     # Setup initial connections
     pool = await connect_to_database()
 
@@ -142,7 +139,9 @@ async def configure():
             lambda: asyncio.create_task(shutdown(pool))
         )
 
-    ny_now = datetime.now(NY_TIMEZONE)
+    # Get current NY time
+    ny_timezone = pytz.timezone('America/New_York')
+    ny_now = datetime.now(ny_timezone)
 
     # Check if today is a holiday and skip if it is
     nyse = get_calendar('NYSE')
@@ -153,12 +152,8 @@ async def configure():
         return
 
     # Get next options expiration
-    if EXPIRATION_TYPE == 'friday':
-        next_expiration = get_next_options_expiration(ny_now)
-        logger.info(f"Next expiration: {next_expiration}")
-    elif EXPIRATION_TYPE == 'zero':
-        next_expiration = ny_now
-        logger.info(f"Next expiration: {next_expiration}")
+    next_expiration = get_next_options_expiration(ny_now)
+    logger.info(f"Next expiration: {next_expiration}")
 
     # Calculate time until next market close (4:00 PM)
     next_close = next_expiration.replace(hour=16, minute=0, second=0, microsecond=0)
@@ -169,32 +164,21 @@ async def configure():
         if next_close.weekday() >= 5:  # Saturday (5) or Sunday (6)
             next_close += timedelta(days=7 - next_close.weekday())
 
-    # Convert expiration to str
-    EXPIRATION_DATETIME = next_close
-    EXPIRATION_INT = int(next_close.strftime("%Y%m%d"))
+    expo_to_use = next_close.strftime("%Y%m%d")
 
-    return next_close, ny_now, pool, loop
+    return next_close, ny_timezone, expo_to_use, pool, loop
 
 
-async def get_ohlc(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
-    async with httpx.AsyncClient() as client:
-        params = {
-            "root": root,
-            "exp": exp,
-            "use_csv": True
-        }
-        res = await client.get(f"{base_url}/v2/bulk_snapshot/option/ohlc", params=params)
-        next_page = res.headers.get('next-page', 'null')
-        if next_page != 'null':
-            logger.error('Error: next page exists but not implemented')
-        else:
-            df = pd.read_csv(io.StringIO(res.text))
-            df['strike'] = df['strike'] / 1000
-            filt = df[['root', 'strike', 'right', 'volume']].copy()
-            return filt
+def update_dte(next_close):
+    ny_timezone = pytz.timezone('America/New_York')
+    # Update time to expiration based on current time
+    ny_now = datetime.now(ny_timezone)
+    dte_days = (next_close - ny_now).total_seconds() / (24 * 60 * 60)
+
+    return max(0, dte_days) / DAYS_IN_YEAR_DTE  # Ensure non-negative
 
 
-async def get_snapshot(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
+async def get_snapshot(root: str, exp: int) -> pd.DataFrame:
     async with httpx.AsyncClient() as client:
         params = {
             "root": root,
@@ -217,16 +201,25 @@ async def get_snapshot(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
             return filt
 
 
-def update_dte(next_close):
-    ny_timezone = pytz.timezone('America/New_York')
-    # Update time to expiration based on current time
-    ny_now = datetime.now(ny_timezone)
-    dte_days = (next_close - ny_now).total_seconds() / (24 * 60 * 60)
+async def get_ohlc(root: str, exp: int) -> pd.DataFrame:
+    async with httpx.AsyncClient() as client:
+        params = {
+            "root": root,
+            "exp": exp,
+            "use_csv": True
+        }
+        res = await client.get(f"{base_url}/v2/bulk_snapshot/option/ohlc", params=params)
+        next_page = res.headers.get('next-page', 'null')
+        if next_page != 'null':
+            logger.error('Error: next page exists but not implemented')
+        else:
+            df = pd.read_csv(io.StringIO(res.text))
+            df['strike'] = df['strike'] / 1000
+            filt = df[['root', 'strike', 'right', 'volume']].copy()
+            return filt
 
-    return max(0, dte_days) / DAYS_IN_YEAR_DTE  # Ensure non-negative
 
-
-def calculate_iv(dataframe: pd.DataFrame, dte: float, risk_free_rate: float = 0.05) -> pd.DataFrame:
+def calculate_iv(dataframe: pd.DataFrame, dte: float, risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     # Create a copy to avoid modifying the original
     df = dataframe.copy()
 
@@ -253,7 +246,7 @@ def calculate_greeks(dataframe: pd.DataFrame, dte: float, risk_free_rate: float 
     df = dataframe.copy()
 
     # Skip rows with NaN IV values
-    valid_mask = df['iv'].notna()
+    valid_mask = df[(df['iv'] != 0) & (df['iv'] != float('nan'))]
 
     if valid_mask.any():
         try:
@@ -273,7 +266,7 @@ def calculate_greeks(dataframe: pd.DataFrame, dte: float, risk_free_rate: float 
     return df
 
 
-def calculate_gex(dataframe):
+def calculate_gex(dataframe, volume_column='volume'):
     """
     Calculate Gamma Exposure (GEX) for options and summarize by strike.
     Assumes only one option per strike/right combination.
@@ -293,7 +286,7 @@ def calculate_gex(dataframe):
     df['option_gex'] = (
             df['gamma'] *
             100 *
-            df['volume'] *
+            df[volume_column] *
             df['underlying_price']
     )
 
@@ -319,62 +312,7 @@ def calculate_gex(dataframe):
     return gex_summary
 
 
-def find_zero_gamma_from_gex(gex_df, underlying_price):
-    """
-    Find the zero gamma point by calculating the cumulative GEX from the GEX by strike data.
-
-    Parameters:
-    gex_df (pd.DataFrame): DataFrame with 'strike' and 'total_gex' columns (output of calculate_gex)
-    underlying_price (float): Current spot price of the underlying
-
-    Returns:
-    float: The strike price where cumulative GEX crosses zero (zero gamma point)
-    """
-    if gex_df is None or len(gex_df) < 2:
-        logger.warning("Not enough data to calculate zero gamma")
-        return underlying_price
-
-    # Sort by strike
-    gex_df = gex_df.sort_values('strike').copy()
-
-    # Calculate cumulative GEX
-    gex_df['cumulative_gex'] = gex_df['total_gex'].cumsum()
-
-    # Extract strikes and cumulative GEX
-    strikes = gex_df['strike'].values
-    cumulative_gex = gex_df['cumulative_gex'].values
-
-    # Check if there's a zero crossing
-    if np.all(cumulative_gex >= 0) or np.all(cumulative_gex <= 0):
-        logger.warning("No zero crossing found in cumulative GEX")
-        return underlying_price
-
-    # Find where cumulative GEX crosses zero
-    zero_cross_idx = np.where(np.diff(np.sign(cumulative_gex)))[0]
-    if len(zero_cross_idx) == 0:
-        logger.warning("No zero crossing found in cumulative GEX")
-        return underlying_price
-
-    # Take the crossing closest to the underlying price
-    idx = zero_cross_idx[np.argmin(np.abs(strikes[zero_cross_idx] - underlying_price))]
-    x1, y1 = strikes[idx], cumulative_gex[idx]
-    x2, y2 = strikes[idx + 1], cumulative_gex[idx + 1]
-
-    # Linear interpolation to find the exact zero crossing
-    if abs(y2 - y1) < 1e-10:  # Avoid division by near-zero
-        zero_gamma = (x1 + x2) / 2
-    else:
-        zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
-
-    # Ensure the result is within bounds
-    if not (min(x1, x2) <= zero_gamma <= max(x1, x2)):
-        logger.warning(f"Interpolated zero gamma {zero_gamma} outside bounds [{x1}, {x2}]")
-        zero_gamma = (x1 + x2) / 2
-
-    return zero_gamma
-
-
-def calculate_gamma_at_levels(dataframe, levels, dte, risk_free_rate=0.05):
+def calculate_gamma_at_levels(dataframe, levels, dte, risk_free_rate=RISK_FREE_RATE):
     """
     Calculate gamma at different price levels using py_vollib_vectorized.
 
@@ -457,12 +395,7 @@ def calculate_gamma_at_levels(dataframe, levels, dte, risk_free_rate=0.05):
 def find_zero_gamma(gamma_df):
     """
     Find the zero gamma (gamma flip) point from the gamma profile.
-
-    Parameters:
-    gamma_df (pd.DataFrame): DataFrame with level and total_gex columns
-
-    Returns:
-    float or None: Price level where gamma flips from negative to positive, or None if not found
+    Improved version that handles multiple crossings more intelligently.
     """
     if gamma_df is None or len(gamma_df) < 2:
         return None
@@ -476,25 +409,58 @@ def find_zero_gamma(gamma_df):
         logger.warning("Warning: No zero crossing found in gamma profile")
         return None
 
-    # Find zero crossings
+    # Find all zero crossings
     zero_cross_idx = np.where(np.diff(np.sign(gex)))[0]
 
     if len(zero_cross_idx) == 0:
         return None
 
+    # If there are multiple crossings, find the one with the strongest slope
+    # This is generally the most significant crossing
+    if len(zero_cross_idx) > 1:
+        slopes = []
+        for idx in zero_cross_idx:
+            # Calculate absolute slope at crossing
+            slope = abs((gex[idx + 1] - gex[idx]) / (levels[idx + 1] - levels[idx]))
+            slopes.append(slope)
+
+        # Get the crossing with steepest slope
+        max_slope_idx = np.argmax(slopes)
+        idx = zero_cross_idx[max_slope_idx]
+    else:
+        idx = zero_cross_idx[0]
+
     # Get values on either side of the crossing
-    idx = zero_cross_idx[0]
     x1, y1 = levels[idx], gex[idx]
     x2, y2 = levels[idx + 1], gex[idx + 1]
+
+    # Additional safety check for division
+    if abs(y2 - y1) < 1e-10:  # Prevent near-zero division
+        return (x1 + x2) / 2  # Just use midpoint if values are too close
 
     # Linear interpolation to find zero crossing
     zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
 
+    # Sanity check that result is between x1 and x2
+    if not (min(x1, x2) <= zero_gamma <= max(x1, x2)):
+        logger.warning(f"Interpolated zero gamma {zero_gamma} outside bounds [{x1}, {x2}]")
+        return (x1 + x2) / 2  # Fallback to midpoint
+
     return zero_gamma
+
+    # # Get values on either side of the crossing
+    # idx = zero_cross_idx[0]
+    # x1, y1 = levels[idx], gex[idx]
+    # x2, y2 = levels[idx + 1], gex[idx + 1]
+    #
+    # # Linear interpolation to find zero crossing
+    # zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
+    #
+    # return zero_gamma
 
 
 def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
-                            strike_range=0.05, num_levels=100):
+                            strike_range=STRIKE_RANGE, num_levels=100):
     """
     Calculate gamma profile and plot it.
 
@@ -527,7 +493,84 @@ def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
     # Find zero gamma point
     zero_gamma = find_zero_gamma(gamma_df)
 
-    return zero_gamma, underlying_price, min_price, max_price
+    return zero_gamma, underlying_price, min_price, max_price, gamma_df
+
+
+def find_zero_gamma_from_gex(gex_df):
+    """
+    Find the zero gamma point directly from the GEX by strike data.
+
+    Parameters:
+    gex_df (pd.DataFrame): DataFrame with 'strike' and 'total_gex' columns (output of calculate_gex)
+
+    Returns:
+    float: The strike price where cumulative GEX crosses zero (zero gamma point)
+    """
+    if gex_df is None or len(gex_df) < 2:
+        logger.warning("Not enough data to calculate zero gamma")
+        return None
+
+    # Sort by strike
+    gex_df = gex_df.sort_values('strike').copy()
+
+    # Calculate cumulative GEX
+    gex_df['cumulative_gex'] = gex_df['total_gex'].cumsum()
+
+    # Extract strikes and cumulative GEX
+    strikes = gex_df['strike'].values
+    cumulative_gex = gex_df['cumulative_gex'].values
+
+    # Check if there's a zero crossing
+    if np.all(cumulative_gex >= 0) or np.all(cumulative_gex <= 0):
+        logger.warning("No zero crossing found in cumulative GEX")
+        return None
+
+    # Find where cumulative GEX crosses zero
+    zero_cross_idx = np.where(np.diff(np.sign(cumulative_gex)))[0]
+    if len(zero_cross_idx) == 0:
+        logger.warning("No zero crossing found in cumulative GEX")
+        return None
+
+    # Take the first crossing (or you can add logic for multiple crossings as in your original code)
+    idx = zero_cross_idx[0]
+    x1, y1 = strikes[idx], cumulative_gex[idx]
+    x2, y2 = strikes[idx + 1], cumulative_gex[idx + 1]
+
+    # Linear interpolation to find the exact zero crossing
+    if abs(y2 - y1) < 1e-10:  # Avoid division by near-zero
+        return (x1 + x2) / 2
+    zero_gamma = x1 - y1 * (x2 - x1) / (y2 - y1)
+
+    # Ensure the result is within bounds
+    if not (min(x1, x2) <= zero_gamma <= max(x1, x2)):
+        logger.warning(f"Interpolated zero gamma {zero_gamma} outside bounds [{x1}, {x2}]")
+        return (x1 + x2) / 2
+
+    return zero_gamma
+
+
+def calculate_zero_gamma_from_gex(dataframe, dte, risk_free_rate=RISK_FREE_RATE):
+    """
+    Calculate zero gamma directly from GEX data, skipping the gamma profile calculation.
+
+    Parameters:
+    dataframe (pd.DataFrame): Merged DataFrame with option data (output of merging snapshot and OHLC)
+    dte (float): Days to expiration (annualized)
+    risk_free_rate (float): Risk-free interest rate
+
+    Returns:
+    tuple: (zero_gamma, underlying_price)
+    """
+    # Calculate GEX by strike
+    gex = calculate_gex(dataframe)
+
+    # Find zero gamma
+    zero_gamma = find_zero_gamma_from_gex(gex)
+
+    # Get underlying price
+    underlying_price = dataframe['underlying_price'].iloc[0]
+
+    return zero_gamma, underlying_price
 
 
 async def run(
@@ -537,21 +580,22 @@ async def run(
         exp_to_use: datetime,
         pool,
 ):
+    logger.info('Entering run function')
     try:
         # Get option data
-        df = await get_snapshot(ticker, EXPIRATION_INT)
+        df = await get_snapshot(ticker, int(exp_to_use.strftime("%Y%m%d")))
         if df is None or df.empty:
             logger.error(f"Failed to get snapshot data for {ticker}")
             return
 
         # Calculate IVs
-        df_iv = calculate_iv(df, t, RISK_FREE_RATE)
+        df_iv = calculate_iv(df, t, risk_free_rate)
 
         # Calculate Greeks
-        df_greeks = calculate_greeks(df_iv, t, RISK_FREE_RATE)
+        df_greeks = calculate_greeks(df_iv, t, risk_free_rate)
 
         # Get volume data
-        volume = await get_ohlc(ticker, EXPIRATION_INT)
+        volume = await get_ohlc(ticker, int(exp_to_use.strftime("%Y%m%d")))
         if volume is None or volume.empty:
             logger.error(f"Failed to get OHLC data for {ticker}")
             return
@@ -563,31 +607,84 @@ async def run(
         # Calculate GEX
         gex = calculate_gex(merged)
         sorted_gex = gex.sort_values(by="total_gex", ascending=False)
-        sorted_gex['strike'] = sorted_gex['strike']
-        # sorted_gex.to_csv('sorted_gex.csv')
+
+        # Get IV data by strike for calls and puts
+        iv_by_strike = {}
+        for right in ['C', 'P']:
+            for _, row in merged[merged['right'] == right].iterrows():
+                strike = row['strike']
+                if strike not in iv_by_strike:
+                    iv_by_strike[strike] = {'C': None, 'P': None}
+                iv_by_strike[strike][right] = row['iv']
 
         # Get current NY time
-        ny_now = datetime.now(NY_TIMEZONE)
+        ny_timezone = pytz.timezone('America/New_York')
+        ny_now = datetime.now(ny_timezone)
 
-        # Calculate and plot gamma profile
-        zero_gamma, underlying_price, min_price, max_price = calculate_gamma_profile(
+        zero_gamma, underlying_price, min_price, max_price, gamma_df = calculate_gamma_profile(
             merged,
             dte=t,
             risk_free_rate=risk_free_rate,
-            strike_range=RISK_FREE_RATE,  # ±5% from current price
+            strike_range=STRIKE_RANGE,
         )
+        print(ticker)
+        print(zero_gamma)
 
-        if zero_gamma is None or underlying_price is None:
-            logger.error(f"Failed to calculate gamma profile for {ticker}")
-            return
+        zero_gamma, underlying_price = calculate_zero_gamma_from_gex(
+            merged,
+            dte=t,
+            risk_free_rate=risk_free_rate,
+        )
+        print(zero_gamma)
 
-        # Filter strikes within range
-        strikes = sorted_gex[(sorted_gex['strike'] > min_price) & (sorted_gex['strike'] < max_price)]
-        strikes_list = strikes.values.tolist()
+        # In your run function, after calculating zero_gamma:
+        if 'prev_zero_gammas' not in globals():
+            globals()['prev_zero_gammas'] = []
+
+
+        # Create exposure lookup dictionary if gamma_df exists
+        exposure_by_level = {}
+        if gamma_df is not None:
+            for _, row in gamma_df.iterrows():
+                exposure_by_level[row['level']] = row['total_gex']
+
+        # Extend each strike's data with IV and exposure
+        enhanced_strikes = []
+        for _, row in sorted_gex.iterrows():
+            strike = row['strike']
+
+            # Base data (what you currently have)
+            strike_data = [
+                float(strike),
+                float(row['call_gex']),
+                float(row['put_gex']),
+                float(row['total_gex'])
+            ]
+
+            # Add call IV
+            call_iv = iv_by_strike.get(strike, {}).get('C', None)
+            strike_data.append(float(call_iv) if call_iv is not None else 0)
+
+            # Add put IV
+            put_iv = iv_by_strike.get(strike, {}).get('P', None)
+            strike_data.append(float(put_iv) if put_iv is not None else 0)
+
+            # Add exposure
+            if gamma_df is not None:
+                # Find closest level
+                closest_level = min(exposure_by_level.keys(), key=lambda x: abs(x - strike))
+                exposure = exposure_by_level[closest_level]
+                strike_data.append(float(exposure))
+            else:
+                strike_data.append(0)
+
+            enhanced_strikes.append(strike_data)
+
+        # Sort by strike price for consistency
+        enhanced_strikes.sort(key=lambda x: x[0])
 
         # Standardize ticker
-        root = "SPX" if ticker == "SPXW" else ticker
-        root = "VIX" if ticker == "VIXW" else ticker
+        root = ticker
 
         # Prepare data for insertion
         data = {
@@ -595,9 +692,9 @@ async def run(
             "data": {
                 "timestamp": ny_now.isoformat(),
                 "ticker": root,
-                "expiration": "zero",
+                "expiration": 'zero',
                 "spot": float(underlying_price),
-                "zero_gamma": float(zero_gamma),
+                "zero_gamma": float(zero_gamma) if zero_gamma is not None else None,  # Fallback to current price
                 "major_pos_vol": float(sorted_gex['strike'].iloc[0]) if not sorted_gex.empty else 0,
                 "major_neg_vol": float(sorted_gex['strike'].iloc[-1]) if not sorted_gex.empty else 0,
                 "sum_gex_vol": float(gex['total_gex'].sum()) if not gex.empty else 0,
@@ -605,46 +702,66 @@ async def run(
                 "minor_neg_vol": float(sorted_gex['strike'].iloc[-2]) if len(sorted_gex) > 1 else 0,
             },
             "trades": [],
-            "strikes": strikes_list,
+            "strikes": enhanced_strikes,
         }
 
         # Save to database
-        await insert_to_database(pool, data)
+        # await insert_to_database(pool, data)  # TODO uncomment for prod
+
         logger.info(f"Successfully processed data for {ticker}")
 
-        return data
+        return {
+            'spot': float(underlying_price),
+            'zero_gamma': float(zero_gamma) if zero_gamma is not None else None,
+            'major_pos_vol': float(sorted_gex['strike'].iloc[0]) if not sorted_gex.empty else 0,
+            'major_neg_vol': float(sorted_gex['strike'].iloc[-1]) if not sorted_gex.empty else 0,
+            'data': data  # Return full data as well if needed
+        }
 
     except Exception as e:
         logger.error(f"Error in run function: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 
 async def main():
     try:
-        # Setup initial connections
-        next_close, ny_now, pool, loop = await configure()
+        next_close, ny_timezone, expo_to_use, pool, loop = await configure()
+        rfr = RISK_FREE_RATE
         ticker_list = TICKER_LIST
 
         # Run continuously until stopped
         while True:
             start_time = time.time()
+
             time_to_expiration = update_dte(next_close)
-            logger.info(f'Time to expiration: {time_to_expiration:.6f} years')
 
             for ticker in ticker_list:
                 logger.info(f"Starting data collection cycle for {ticker}")
                 data = await run(
                     ticker=ticker,
-                    risk_free_rate=RISK_FREE_RATE,
+                    risk_free_rate=rfr,
                     t=time_to_expiration,
-                    exp_to_use=EXPIRATION_INT,
+                    exp_to_use=next_close,
                     pool=pool,
                 )
+
+                if data:
+                    # Extract values for plotting
+                    spot = data['spot']
+                    zero_gamma = data['zero_gamma'] if data['zero_gamma'] is not None else spot
+                    major_pos_vol = data['major_pos_vol']
+                    major_neg_vol = data['major_neg_vol']
+
+                    # Set breakpoint here to inspect after plotting
+                    logger.info(f"Completed processing {ticker}")
 
             # Calculate processing time and adjust sleep
             processing_time = time.time() - start_time
             sleep_time = max(0, SLEEP_TIME - processing_time)  # Target 5-second cycle
-            logger.info(f"Cycle completed in {processing_time:.2f}s, sleeping for {SLEEP_TIME:.2f}s")
+
+            # loop_counter += 1  # TODO uncomment
 
             await asyncio.sleep(sleep_time)
 
