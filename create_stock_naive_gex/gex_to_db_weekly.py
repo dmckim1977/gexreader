@@ -570,11 +570,11 @@ async def run(
         ny_now = datetime.now(NY_TIMEZONE)
 
         # Calculate and plot gamma profile
-        zero_gamma, underlying_price, min_price, max_price = calculate_gamma_profile(
+        zero_gamma, underlying_price, min_price, max_price = calculate_zero_gamma(
             merged,
             dte=t,
             risk_free_rate=risk_free_rate,
-            strike_range=RISK_FREE_RATE,  # ±5% from current price
+            strike_range=0.05,
         )
 
         if zero_gamma is None or underlying_price is None:
