@@ -28,7 +28,7 @@ base_url = os.getenv("THETADATA_URL")
 
 TICKER_LIST: list = ['SPXW', 'QQQ', 'SPY', 'IWM']
 EXPIRATION_TYPE: str = 'zero'  # options 'friday', or 'zero'
-SLEEP_TIME: int = 30
+SLEEP_TIME: int = 5
 RISK_FREE_RATE: float = 0.025
 STRIKE_RANGE: Optional[float] = None
 STRIKE_LEVELS: int = 50
