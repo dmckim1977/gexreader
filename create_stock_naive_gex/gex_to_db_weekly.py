@@ -26,7 +26,7 @@ load_dotenv()
 
 base_url = os.getenv("THETADATA_URL")
 
-TICKER_LIST: list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'VXX', 'PLTR', 'COIN', 'AMD', 'BABA', 'MSTR', 'SMCI']
+TICKER_LIST: list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'VXX', 'PLTR', 'COIN', 'AMD', 'BABA', 'MSTR', 'SMCI', 'TQQQ']
 EXPIRATION_TYPE: str = 'friday'  # options 'friday', or 'zero'
 SLEEP_TIME: int = 15
 RISK_FREE_RATE: float = 0.025
