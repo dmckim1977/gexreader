@@ -30,7 +30,7 @@ TICKER_LIST: list = ['AAPL', 'MSFT', 'META', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'V
 EXPIRATION_TYPE: str = 'friday'  # options 'friday', or 'zero'
 SLEEP_TIME: int = 15
 RISK_FREE_RATE: float = 0.025
-STRIKE_RANGE: Optional[float] = None
+STRIKE_RANGE: float = 0.1
 STRIKE_LEVELS: int = 50
 DAYS_IN_YEAR_DTE: int = 262
 NY_TIMEZONE = pytz.timezone('America/New_York')
@@ -494,7 +494,7 @@ def find_zero_gamma(gamma_df):
 
 
 def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
-                            strike_range=0.05, num_levels=100):
+                            strike_range=STRIKE_RANGE, num_levels=100):
     """
     Calculate gamma profile and plot it.
 
@@ -513,8 +513,8 @@ def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
     underlying_price = dataframe['underlying_price'].iloc[0]
 
     # Generate price levels
-    min_price = underlying_price * (1 - strike_range)
-    max_price = underlying_price * (1 + strike_range)
+    min_price = underlying_price * (1 - STRIKE_RANGE)
+    max_price = underlying_price * (1 + STRIKE_RANGE)
     levels = np.linspace(min_price, max_price, num_levels)
 
     # Calculate gamma at each level
@@ -585,7 +585,7 @@ def find_zero_gamma_from_gex(gex_df, underlying_price):
     return zero_gamma
 
 
-def calculate_zero_gamma(dataframe, dte, risk_free_rate=0.05, strike_range=0.05):
+def calculate_zero_gamma(dataframe, dte, risk_free_rate=0.05, strike_range=STRIKE_RANGE):
     """
     Calculate zero gamma using GEX at the current spot price.
 
@@ -608,8 +608,8 @@ def calculate_zero_gamma(dataframe, dte, risk_free_rate=0.05, strike_range=0.05)
     zero_gamma = find_zero_gamma_from_gex(gex, underlying_price)
 
     # Calculate min and max price for strike filtering
-    min_price = underlying_price * (1 - strike_range)
-    max_price = underlying_price * (1 + strike_range)
+    min_price = underlying_price * (1 - STRIKE_RANGE)
+    max_price = underlying_price * (1 + STRIKE_RANGE)
 
     return zero_gamma, underlying_price, min_price, max_price
 
@@ -658,7 +658,7 @@ async def run(
             merged,
             dte=t,
             risk_free_rate=risk_free_rate,
-            strike_range=0.05,
+            strike_range=STRIKE_RANGE,
         )
 
         if zero_gamma is None or underlying_price is None:

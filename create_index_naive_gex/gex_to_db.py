@@ -30,7 +30,7 @@ TICKER_LIST: list = ['SPXW', 'QQQ', 'SPY', 'IWM']
 EXPIRATION_TYPE: str = 'zero'  # options 'friday', or 'zero'
 SLEEP_TIME: int = 5
 RISK_FREE_RATE: float = 0.025
-STRIKE_RANGE: Optional[float] = None
+STRIKE_RANGE: float = 0.1
 STRIKE_LEVELS: int = 50
 DAYS_IN_YEAR_DTE: int = 262
 NY_TIMEZONE = pytz.timezone('America/New_York')
@@ -494,7 +494,7 @@ def find_zero_gamma(gamma_df):
 
 
 def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
-                            strike_range=0.05, num_levels=100):
+                            strike_range=STRIKE_RANGE, num_levels=100):
     """
     Calculate gamma profile and plot it.
 
@@ -513,8 +513,8 @@ def calculate_gamma_profile(dataframe, dte, risk_free_rate=RISK_FREE_RATE,
     underlying_price = dataframe['underlying_price'].iloc[0]
 
     # Generate price levels
-    min_price = underlying_price * (1 - strike_range)
-    max_price = underlying_price * (1 + strike_range)
+    min_price = underlying_price * (1 - STRIKE_RANGE)
+    max_price = underlying_price * (1 + STRIKE_RANGE)
     levels = np.linspace(min_price, max_price, num_levels)
 
     # Calculate gamma at each level
@@ -574,7 +574,6 @@ async def run(
             merged,
             dte=t,
             risk_free_rate=risk_free_rate,
-            strike_range=RISK_FREE_RATE,  # ±5% from current price
         )
 
         if zero_gamma is None or underlying_price is None:
