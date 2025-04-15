@@ -20,7 +20,7 @@ from pandas_market_calendars import get_calendar
 # Configure logging
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.INFO)
 
 load_dotenv()
 
@@ -92,18 +92,35 @@ from pandas_market_calendars import get_calendar
 from datetime import datetime, timedelta
 import pytz
 
+
 def get_next_options_expiration(current_date: datetime, ticker: str = None) -> datetime:
     nyse = get_calendar('NYSE')
     NY_TIMEZONE = pytz.timezone('America/New_York')
 
+    # Ensure current_date is timezone-aware
     if current_date.tzinfo is None:
         current_date = NY_TIMEZONE.localize(current_date)
 
+    # Log input date
+    logger.info(f"Calculating expiration for date: {current_date}, ticker: {ticker}")
+
+    # Get NYSE schedule for a 2-week window
     start_date = current_date.date()
     end_date = (current_date + timedelta(days=14)).date()
-    schedule = nyse.schedule(start_date=start_date, end_date=end_date)
+    try:
+        schedule = nyse.schedule(start_date=start_date, end_date=end_date)
+        logger.info(f"Schedule retrieved with {len(schedule)} trading days")
+    except Exception as e:
+        logger.error(f"Error retrieving NYSE schedule: {e}")
+        raise ValueError("Failed to retrieve NYSE schedule")
 
-    target_weekday = 2 if ticker in ['VIX', 'VIXW'] else 4
+    # Handle empty schedule
+    if schedule.empty:
+        logger.error("NYSE schedule is empty for the given date range")
+        raise ValueError("No trading days found in the date range")
+
+    # Determine target weekday
+    target_weekday = 2 if ticker in ['VIX', 'VIXW'] else 4  # Wednesday for VIX, Friday for others
     days_ahead = target_weekday - current_date.weekday()
     if days_ahead <= 0:
         days_ahead += 7
@@ -111,27 +128,42 @@ def get_next_options_expiration(current_date: datetime, ticker: str = None) -> d
     next_target_date = next_target_day.date()
 
     # Default closing time
-    close_hour = 16  # 4:00 PM
+    close_hour = 16
+    close_minute = 0
 
-    # Check for early close
-    if next_target_date in schedule.index:
-        market_close = schedule.loc[next_target_date, 'market_close']
-        close_hour = market_close.hour
-        close_minute = market_close.minute
-    else:
-        # Find previous trading day
-        valid_days = schedule.index
-        next_target_date = valid_days[valid_days < next_target_date][-1]
-        market_close = schedule.loc[next_target_date, 'market_close']
-        close_hour = market_close.hour
-        close_minute = market_close.minute
+    # Convert schedule index to date objects for comparison
+    valid_days = schedule.index.date
+    try:
+        if next_target_date in valid_days:
+            market_close = schedule.loc[schedule.index[valid_days == next_target_date][0], 'market_close']
+            close_hour = market_close.hour
+            close_minute = market_close.minute
+            logger.info(f"Target date {next_target_date} is a trading day, close: {market_close}")
+        else:
+            # Find the previous trading day
+            previous_days = valid_days[valid_days < next_target_date]
+            if len(previous_days) == 0:
+                logger.error("No previous trading days found before target date")
+                raise ValueError("No valid trading day found before target date")
+            next_target_date = previous_days[-1]
+            market_close = schedule.loc[schedule.index[valid_days == next_target_date][0], 'market_close']
+            close_hour = market_close.hour
+            close_minute = market_close.minute
+            logger.info(f"Target date adjusted to previous trading day: {next_target_date}")
+    except Exception as e:
+        logger.error(f"Error processing trading day: {e}")
+        raise
 
-    expiration = NY_TIMEZONE.localize(
-        datetime.combine(next_target_date, datetime.min.time())
-    ).replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
-
-    logger.info(f"Selected expiration for {ticker}: {expiration}")
-    return expiration
+    # Construct expiration datetime
+    try:
+        expiration = NY_TIMEZONE.localize(
+            datetime.combine(next_target_date, datetime.min.time())
+        ).replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+        logger.info(f"Selected expiration for {ticker}: {expiration}")
+        return expiration
+    except Exception as e:
+        logger.error(f"Error constructing expiration datetime: {e}")
+        raise
 
 
 async def configure():
