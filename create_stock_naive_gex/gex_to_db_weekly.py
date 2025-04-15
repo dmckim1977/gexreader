@@ -88,43 +88,50 @@ async def insert_to_database(pool, data):
         raise
 
 
-def get_next_options_expiration(current_date: datetime) -> datetime:
-    """Returns the next stock options expiration date (Friday at 4:00 PM ET), adjusting for holidays."""
-    nyse = get_calendar('NYSE')
+from pandas_market_calendars import get_calendar
+from datetime import datetime, timedelta
+import pytz
 
-    # Ensure current_date is timezone-aware
+def get_next_options_expiration(current_date: datetime, ticker: str = None) -> datetime:
+    nyse = get_calendar('NYSE')
+    NY_TIMEZONE = pytz.timezone('America/New_York')
+
     if current_date.tzinfo is None:
         current_date = NY_TIMEZONE.localize(current_date)
 
-    # Get NYSE trading days (valid schedule) for a reasonable range
     start_date = current_date.date()
-    end_date = (current_date + timedelta(days=14)).date()  # Look 2 weeks ahead
-    schedule = nyse.valid_days(start_date=start_date, end_date=end_date)
-    holidays = nyse.holidays().holidays
+    end_date = (current_date + timedelta(days=14)).date()
+    schedule = nyse.schedule(start_date=start_date, end_date=end_date)
 
-    # If today is Friday and not a holiday, use today
-    if current_date.weekday() == 4:  # Friday
-        if current_date.date() not in holidays:
-            return current_date.replace(hour=16, minute=0, second=0, microsecond=0)
-
-    # Find the next Friday
-    days_ahead = 4 - current_date.weekday()  # 4 is Friday (Monday=0, Sunday=6)
-    if days_ahead <= 0:  # If today is Friday or after, go to next week
+    target_weekday = 2 if ticker in ['VIX', 'VIXW'] else 4
+    days_ahead = target_weekday - current_date.weekday()
+    if days_ahead <= 0:
         days_ahead += 7
-    next_friday = current_date + timedelta(days=days_ahead)
-    next_friday = next_friday.replace(hour=16, minute=0, second=0, microsecond=0)
-    if next_friday.tzinfo is None:
-        next_friday = NY_TIMEZONE.localize(next_friday)
+    next_target_day = current_date + timedelta(days=days_ahead)
+    next_target_date = next_target_day.date()
 
-    # Adjust if next Friday is a holiday (e.g., Good Friday)
-    while next_friday.date() in holidays:
-        # Move to the previous trading day (typically Thursday)
-        next_friday -= timedelta(days=1)
-        # Ensure it’s a valid trading day
-        while next_friday.date() not in schedule:
-            next_friday -= timedelta(days=1)
+    # Default closing time
+    close_hour = 16  # 4:00 PM
 
-    return next_friday
+    # Check for early close
+    if next_target_date in schedule.index:
+        market_close = schedule.loc[next_target_date, 'market_close']
+        close_hour = market_close.hour
+        close_minute = market_close.minute
+    else:
+        # Find previous trading day
+        valid_days = schedule.index
+        next_target_date = valid_days[valid_days < next_target_date][-1]
+        market_close = schedule.loc[next_target_date, 'market_close']
+        close_hour = market_close.hour
+        close_minute = market_close.minute
+
+    expiration = NY_TIMEZONE.localize(
+        datetime.combine(next_target_date, datetime.min.time())
+    ).replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+
+    logger.info(f"Selected expiration for {ticker}: {expiration}")
+    return expiration
 
 
 async def configure():

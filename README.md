@@ -48,6 +48,11 @@ Script location: `/apps/gexreader/gexray3_db_to_sse`
 - Add logic for Holidays to 0DTE expirations.
 
 # Changelog
+
+## v2025.4.14
+
+- Adjust holiday handling for gex_to_db_weekly
+
 ## v2025.4.9
 
 - Updated strike range in naive gex calcs
