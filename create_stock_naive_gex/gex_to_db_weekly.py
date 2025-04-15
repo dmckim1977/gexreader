@@ -160,30 +160,32 @@ async def configure():
         return
 
     # Get next options expiration
-    if EXPIRATION_TYPE == 'friday':
-        next_expiration = get_next_options_expiration(ny_now)
-        logger.info(f"Next expiration: {next_expiration}")
-    elif EXPIRATION_TYPE == 'zero':
-        next_expiration = ny_now
-        logger.info(f"Next expiration: {next_expiration}")
+    try:
+        if EXPIRATION_TYPE == 'friday':
+            next_expiration = get_next_options_expiration(ny_now)
+            logger.info(f"Next expiration: {next_expiration}")
+        elif EXPIRATION_TYPE == 'zero':
+            next_expiration = ny_now
+            logger.info(f"Next expiration: {next_expiration}")
+        else:
+            raise ValueError(f"Unsupported EXPIRATION_TYPE: {EXPIRATION_TYPE}")
+    except Exception as e:
+        logger.error(f"Error calculating expiration: {e}")
+        raise
 
-    # Calculate time until next market close (4:00 PM)
-    next_close = next_expiration.replace(hour=16, minute=0, second=0, microsecond=0)
-    if ny_now > next_close:
-        # If we're past closing time, use next business day
-        next_close += timedelta(days=1)
-        # Simple business day check (not accounting for holidays)
-        if next_close.weekday() >= 5:  # Saturday (5) or Sunday (6)
-            next_close += timedelta(days=7 - next_close.weekday())
+    # Set expiration variables
+    EXPIRATION_DATETIME = next_expiration
+    try:
+        EXPIRATION_INT = int(next_expiration.strftime("%Y%m%d"))
+    except ValueError as e:
+        logger.error(f"Error converting expiration to int: {e}")
+        raise
 
-    # Convert expiration to str
-    EXPIRATION_DATETIME = next_close
-    EXPIRATION_INT = int(next_close.strftime("%Y%m%d"))
-
-    return next_close, ny_now, pool, loop
+    return next_expiration, ny_now, pool, loop
 
 
 async def get_ohlc(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
+    logger.info(f"Fetching OHLC for {root} with expiration {exp}")
     async with httpx.AsyncClient() as client:
         params = {
             "root": root,
@@ -202,6 +204,7 @@ async def get_ohlc(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
 
 
 async def get_snapshot(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
+    logger.info(f"Fetching snapshot for {root} with expiration {exp}")
     async with httpx.AsyncClient() as client:
         params = {
             "root": root,
