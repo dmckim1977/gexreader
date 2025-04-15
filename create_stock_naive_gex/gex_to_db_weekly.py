@@ -167,13 +167,10 @@ def get_next_options_expiration(current_date: datetime, ticker: str = None) -> d
 
 
 async def configure():
-    global EXPIRATION_INT
-    global EXPIRATION_DATETIME
+    global EXPIRATION_INT, EXPIRATION_DATETIME
 
-    # Setup initial connections
     pool = await connect_to_database()
 
-    # Register signal handlers for graceful shutdown
     loop = asyncio.get_running_loop()
     for sig_name in ('SIGINT', 'SIGTERM'):
         loop.add_signal_handler(
@@ -183,7 +180,6 @@ async def configure():
 
     ny_now = datetime.now(NY_TIMEZONE)
 
-    # Check if today is a holiday and skip if it is
     nyse = get_calendar('NYSE')
     holidays = nyse.holidays().holidays
     if ny_now.date() in holidays:
@@ -191,7 +187,6 @@ async def configure():
         await shutdown(pool)
         return
 
-    # Get next options expiration
     try:
         if EXPIRATION_TYPE == 'friday':
             next_expiration = get_next_options_expiration(ny_now)
@@ -205,10 +200,10 @@ async def configure():
         logger.error(f"Error calculating expiration: {e}")
         raise
 
-    # Set expiration variables
     EXPIRATION_DATETIME = next_expiration
     try:
         EXPIRATION_INT = int(next_expiration.strftime("%Y%m%d"))
+        logger.info(f"EXPIRATION_INT set to: {EXPIRATION_INT}")
     except ValueError as e:
         logger.error(f"Error converting expiration to int: {e}")
         raise
