@@ -6,4 +6,4 @@ requires-python = ">=3.12"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["trade_tempo", "bin/gex_to_db_dev"]
+members = ["trade_tempo", "bin/gex_to_db_dev", "futures_gex_adjuster"]
