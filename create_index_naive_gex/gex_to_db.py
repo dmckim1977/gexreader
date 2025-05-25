@@ -683,6 +683,7 @@ async def run(
                 # Save to database
                 await insert_to_database(pool, data)
                 logger.info(f"Successfully processed data for ES")
+                logger.info('/ES Inserted')
 
         except Exception as e:
             logger.error("Error converting ES data.")
