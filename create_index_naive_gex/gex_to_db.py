@@ -674,6 +674,7 @@ async def run(
                 ratio_columns = ["spot", "zero_gamma", "major_pos_vol", "major_neg_vol", "minor_pos_vol",
                                  "minor_neg_vol"]
                 for col in ratio_columns:
+                    logger.info(f'ES Ratio data: Ratio: {es_ratio} column: {col} es_data: {es_data["data"[col]]}')
                     es_data["data"][col] = data["data"][col] + es_ratio
 
                 es_data["data"]["ticker"] = "/ES"
