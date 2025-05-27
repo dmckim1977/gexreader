@@ -55,7 +55,7 @@ async def connect_to_database():
         raise
 
 
-async def get_ratio(ticker: str):
+async def get_ratio(pool, ticker: str):
     try:
         async with pool.acquire() as conn:
             # If you want just the ratio value
@@ -580,6 +580,7 @@ async def run(
     t: float,
     exp_to_use: datetime,
     pool,
+    es_ratio=None,
 ):
     try:
         # Get option data
@@ -666,22 +667,17 @@ async def run(
         logger.info(f"Successfully processed data for {ticker}")
 
         try:
-            if ticker == "SPXW":
-                ratio_columns = [
-                    "spot",
-                    "zero_gamma",
-                    "major_pos_vol",
-                    "major_neg_vol",
-                    "minor_pos_vol",
-                    "minor_neg_vol",
-                ]
-                for cols in ratio_columns:
-                    data["data"][cols] += ES_RATIO
+            if ticker == "SPXW" and es_ratio is not None:
+                es_data = data.copy()
+                es_data["data"] = data["data"].copy()
 
-                data["data"]["ticker"] = "/ES"
+                ratio_columns = ["spot", "zero_gamma", "major_pos_vol", "major_neg_vol", "minor_pos_vol",
+                                 "minor_neg_vol"]
+                for col in ratio_columns:
+                    es_data["data"][col] = data["data"][col] * es_ratio  # Use multiplication instead of addition
 
-                # Save to database
-                await insert_to_database(pool, data)
+                es_data["data"]["ticker"] = "/ES"
+                await insert_to_database(pool, es_data)
                 logger.info(f"Successfully processed data for ES")
                 logger.info('/ES Inserted')
 
@@ -701,7 +697,7 @@ async def main():
         next_close, ny_now, pool, loop = await configure()
         ticker_list = TICKER_LIST
 
-        ES_RATIO = get_ratio(ticker="ES")
+        ES_RATIO = await get_ratio(pool, ticker="ES")
         logger.info(f"ES Ratio is {ES_RATIO}")
 
         # Run continuously until stopped
@@ -718,6 +714,7 @@ async def main():
                     t=time_to_expiration,
                     exp_to_use=EXPIRATION_INT,
                     pool=pool,
+                    es_ratio=ES_RATIO,
                 )
 
             # Calculate processing time and adjust sleep
