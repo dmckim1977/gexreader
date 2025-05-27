@@ -51,7 +51,7 @@ async def connect_to_database():
         logger.info("Successfully connected to PostgreSQL database")
         return pool
     except Exception as e:
-        logger.error(f"Error connecting to PostgreSQL: {e}")
+        logger.exception(f"Error connecting to PostgreSQL: {e}")
         raise
 
 
@@ -68,7 +68,7 @@ async def get_ratio(pool, ticker: str):
             )
             return ratio
     except Exception as e:
-        logger.error(f"Error selecting ratio for {ticker} from database: {e}")
+        logger.exception(f"Error selecting ratio for {ticker} from database: {e}")
         return None
 
 
@@ -101,7 +101,7 @@ async def insert_to_database(pool, data):
             )
             logger.info(f"Inserted data for {data['data']['ticker']} into database")
     except Exception as e:
-        logger.error(f"Error inserting into database: {e}")
+        logger.exception(f"Error inserting into database: {e}")
         raise
 
 
@@ -200,7 +200,7 @@ async def get_ohlc(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
         )
         next_page = res.headers.get("next-page", "null")
         if next_page != "null":
-            logger.error("Error: next page exists but not implemented")
+            logger.exception("Error: next page exists but not implemented")
         else:
             df = pd.read_csv(io.StringIO(res.text))
             df["strike"] = df["strike"] / 1000
@@ -219,7 +219,7 @@ async def get_snapshot(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
         except Exception as e:
             print(f"####### Error getting next page: {res.headers} Error: {e}")
         if next_page != "null":
-            logger.error("Error: next page exists but not implemented")
+            logger.exception("Error: next page exists but not implemented")
         else:
             df = pd.read_csv(io.StringIO(res.text))
             df["strike"] = df["strike"] / 1000
@@ -277,7 +277,7 @@ def calculate_iv(
             on_error="ignore",
         )
     except Exception as e:
-        logger.error(f"IV calculation error: {e}")
+        logger.exception(f"IV calculation error: {e}")
         df["iv"] = float("nan")
 
     return df
@@ -304,7 +304,7 @@ def calculate_greeks(
                 return_as="numpy",
             )
         except Exception as e:
-            logger.error(f"Gamma calculation error: {e}")
+            logger.exception(f"Gamma calculation error: {e}")
             df["gamma"] = float("nan")
     else:
         df["gamma"] = float("nan")
@@ -482,7 +482,7 @@ def calculate_gamma_at_levels(dataframe, levels, dte, risk_free_rate=0.05):
             )
 
         except Exception as e:
-            logger.error(f"Error calculating gamma at level {level}: {e}")
+            logger.exception(f"Error calculating gamma at level {level}: {e}")
             results.append(
                 {"level": level, "call_gex": 0, "put_gex": 0, "total_gex": 0}
             )
@@ -565,7 +565,7 @@ def calculate_gamma_profile(
     gamma_df = calculate_gamma_at_levels(dataframe, levels, dte, risk_free_rate)
 
     if gamma_df is None:
-        logger.error("Failed to calculate gamma profile")
+        logger.exception("Failed to calculate gamma profile")
         return None, None, None, None
 
     # Find zero gamma point
@@ -586,7 +586,7 @@ async def run(
         # Get option data
         df = await get_snapshot(ticker, EXPIRATION_INT)
         if df is None or df.empty:
-            logger.error(f"Failed to get snapshot data for {ticker}")
+            logger.exception(f"Failed to get snapshot data for {ticker}")
             return
 
         # Calculate IVs
@@ -598,7 +598,7 @@ async def run(
         # Get volume data
         volume = await get_ohlc(ticker, EXPIRATION_INT)
         if volume is None or volume.empty:
-            logger.error(f"Failed to get OHLC data for {ticker}")
+            logger.exception(f"Failed to get OHLC data for {ticker}")
             return
 
         # Merge data
@@ -622,7 +622,7 @@ async def run(
         )
 
         if zero_gamma is None or underlying_price is None:
-            logger.error(f"Failed to calculate gamma profile for {ticker}")
+            logger.exception(f"Failed to calculate gamma profile for {ticker}")
             return
 
         # Filter strikes within range
@@ -682,12 +682,12 @@ async def run(
                 logger.info('/ES Inserted')
 
         except Exception as e:
-            logger.error("Error converting ES data.")
+            logger.exception(f"Error converting ES data. {e}")
 
         return data
 
     except Exception as e:
-        logger.error(f"Error in run function: {e}")
+        logger.exception(f"Error in run function: {e}")
         return None
 
 
@@ -729,7 +729,7 @@ async def main():
     except asyncio.CancelledError:
         logger.info("Main task was cancelled, shutting down")
     except Exception as e:
-        logger.error(f"Unhandled exception in main: {e}")
+        logger.exception(f"Unhandled exception in main: {e}")
     finally:
         # Ensure connections are closed
         if "pool" in locals():
@@ -761,4 +761,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Process interrupted by user")
     except Exception as e:
-        logger.error(f"Error in main process: {e}")
+        logger.exception(f"Error in main process: {e}")
