@@ -1,10 +1,10 @@
 services:
-  gexray3:  # Renamed from 'services' to 'gexray3' for clarity
+  gexray3-v2:  # Renamed from 'services' to 'gexray3' for clarity
     build:
       context: .
       dockerfile: Dockerfile
-    image: gexray3:v1.0.0
-    container_name: gexray3
+    image: gexray3:v2.0.0
+    container_name: gexray3-v2
     restart: unless-stopped
     environment:
       - THETADATA_URL=${THETADATA_URL}
