@@ -676,7 +676,7 @@ async def run(
                 for col in ratio_columns:
                     es_data["data"][col] = data["data"][col] + es_ratio
 
-                es_data["data"]["ticker"] = "/ES"
+                es_data["data"]["ticker"] = "ES.CME"
                 await insert_to_database(pool, es_data)
                 logger.info(f"Successfully processed data for ES")
                 logger.info('/ES Inserted')
