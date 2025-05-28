@@ -674,9 +674,11 @@ async def run(
                 ratio_columns = ["spot", "zero_gamma", "major_pos_vol", "major_neg_vol", "minor_pos_vol",
                                  "minor_neg_vol"]
                 for col in ratio_columns:
+                    logger.info(f'################# ES Ratio {es_ratio}')
                     es_data["data"][col] = data["data"][col] + es_ratio
 
                 es_data["data"]["ticker"] = "ES.CME"
+                logger.info(es_data['data'])
                 await insert_to_database(pool, es_data)
                 logger.info(f"Successfully processed data for ES")
                 logger.info('/ES Inserted')
