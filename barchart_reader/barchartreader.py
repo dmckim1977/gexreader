@@ -87,7 +87,7 @@ class DBConfig:
 	password: str = os.getenv('POSTGRES_PASSWORD', '')
 	database: str = os.getenv('POSTGRES_DB', None)
 	host: str = os.getenv('POSTGRES_HOST', 'localhost')
-	port: int = int(os.getenv('POSTGRES_PORT', '5432'))
+	port: int = int(os.getenv('POSTGRES_PORT', 5432))
 
 
 @dataclass
