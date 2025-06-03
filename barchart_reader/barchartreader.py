@@ -184,6 +184,7 @@ class BarchartReader:
                     target_time = current_time - timedelta(minutes=interval_min)
 
                     # SQL query to fetch the most recent GEX data point
+                    # Note: Using raw SQL with asyncpg, so we need to handle timezone differently than SQLAlchemy
                     query = """
                         SELECT 
                             timestamp AT TIME ZONE 'UTC' as timestamp, 
@@ -192,12 +193,15 @@ class BarchartReader:
                         FROM gexray3
                         WHERE ticker = $1
                           AND DATE(timestamp AT TIME ZONE 'UTC') = $2
-                          AND timestamp <= $3
+                          AND timestamp AT TIME ZONE 'UTC' <= $3
                         ORDER BY timestamp DESC
                         LIMIT 1
                     """
 
-                    row = await conn.fetchrow(query, ticker, target_date, target_time)
+                    # Convert target_time to naive UTC for the query (like SQLAlchemy does)
+                    target_time_utc = target_time.replace(tzinfo=None)
+
+                    row = await conn.fetchrow(query, ticker, target_date, target_time_utc)
 
                     # Process the data if available
                     if row:
