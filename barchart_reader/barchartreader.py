@@ -59,8 +59,8 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-	level=logging.INFO,
-	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -71,9 +71,9 @@ LOOP_SLEEP_TIME = 2  # 2 seconds between polls
 
 # Tickers to monitor (you can expand this list)
 TICKERS = [
-	"SPXW", "VXX", "SPY", "QQQ", "IWM", "DIA", "TQQQ",
-	"AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA",
-	"TSLA", "AMD", "PLTR", "SMCI", "MSTR", "COIN", "BABA"
+    "SPXW", "VXX", "SPY", "QQQ", "IWM", "DIA", "TQQQ",
+    "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA",
+    "TSLA", "AMD", "PLTR", "SMCI", "MSTR", "COIN", "BABA"
 ]
 
 # Time intervals to look back (in minutes)
@@ -82,109 +82,109 @@ INTERVALS = [0, 1, 5, 15]
 
 @dataclass
 class DBConfig:
-	"""Database connection configuration."""
-	user: str = os.getenv('POSTGRES_USER', 'postgres')
-	password: str = os.getenv('POSTGRES_PASSWORD', '')
-	database: str = os.getenv('POSTGRES_DB', None)
-	host: str = os.getenv('POSTGRES_HOST', 'localhost')
-	port: int = int(os.getenv('POSTGRES_PORT', 5432))
+    """Database connection configuration."""
+    user: str = os.getenv('POSTGRES_USER', 'postgres')
+    password: str = os.getenv('POSTGRES_PASSWORD', '')
+    database: str = os.getenv('POSTGRES_DB', None)
+    host: str = os.getenv('POSTGRES_HOST', 'localhost')
+    port: int = int(os.getenv('POSTGRES_PORT', '5432'))
 
 
 @dataclass
 class RedisConfig:
-	"""Redis connection configuration."""
-	host: str = os.getenv('REDIS_HOST', 'localhost')
-	port: int = int(os.getenv('REDIS_PORT', '6379'))
-	db: int = int(os.getenv('REDIS_DB', '0'))
-	client_name: str = REDIS_CLIENT_NAME
+    """Redis connection configuration."""
+    host: str = os.getenv('REDIS_HOST', 'localhost')
+    port: int = int(os.getenv('REDIS_PORT', '6379'))
+    db: int = int(os.getenv('REDIS_DB', '0'))
+    client_name: str = REDIS_CLIENT_NAME
 
 
 class BarchartReader:
-	"""Class to handle fetching and publishing barchart data from the gexray3 table."""
+    """Class to handle fetching and publishing barchart data from the gexray3 table."""
 
-	def __init__(
-			self,
-			db_config: Optional[DBConfig] = None,
-			redis_config: Optional[RedisConfig] = None
-	):
-		"""
-		Initialize the BarchartReader.
+    def __init__(
+            self,
+            db_config: Optional[DBConfig] = None,
+            redis_config: Optional[RedisConfig] = None
+    ):
+        """
+        Initialize the BarchartReader.
 
-		Args:
-			db_config: Database connection configuration
-			redis_config: Redis connection configuration
-		"""
-		self.db_config = db_config or DBConfig()
-		self.redis_config = redis_config or RedisConfig()
-		self.db_pool: Optional[asyncpg.Pool] = None
-		self.redis_conn: Optional[redis.Redis] = None
+        Args:
+            db_config: Database connection configuration
+            redis_config: Redis connection configuration
+        """
+        self.db_config = db_config or DBConfig()
+        self.redis_config = redis_config or RedisConfig()
+        self.db_pool: Optional[asyncpg.Pool] = None
+        self.redis_conn: Optional[redis.Redis] = None
 
-	async def connect_to_database(self) -> asyncpg.Pool:
-		"""Establish connection to PostgreSQL database using asyncpg."""
-		try:
-			self.db_pool = await asyncpg.create_pool(
-				user=self.db_config.user,
-				password=self.db_config.password,
-				database=self.db_config.database,
-				host=self.db_config.host,
-				port=self.db_config.port,
-				min_size=1,
-				max_size=10
-			)
-			logger.info("Successfully connected to PostgreSQL database")
-			return self.db_pool
-		except Exception as e:
-			logger.error(f"Error connecting to PostgreSQL: {e}")
-			raise
+    async def connect_to_database(self) -> asyncpg.Pool:
+        """Establish connection to PostgreSQL database using asyncpg."""
+        try:
+            self.db_pool = await asyncpg.create_pool(
+                user=self.db_config.user,
+                password=self.db_config.password,
+                database=self.db_config.database,
+                host=self.db_config.host,
+                port=self.db_config.port,
+                min_size=1,
+                max_size=10
+            )
+            logger.info("Successfully connected to PostgreSQL database")
+            return self.db_pool
+        except Exception as e:
+            logger.error(f"Error connecting to PostgreSQL: {e}")
+            raise
 
-	async def connect_to_redis(self) -> redis.Redis:
-		"""Establish connection to Redis using redis.asyncio."""
-		try:
-			pool = redis.ConnectionPool(
-				host=self.redis_config.host,
-				port=self.redis_config.port,
-				db=self.redis_config.db,
-				socket_keepalive=True,
-				socket_timeout=10,
-				client_name=self.redis_config.client_name
-			)
-			self.redis_conn = redis.Redis(connection_pool=pool, decode_responses=True)
-			logger.info("Successfully connected to Redis")
-			return self.redis_conn
-		except Exception as e:
-			logger.error(f"Error connecting to Redis: {e}")
-			raise
+    async def connect_to_redis(self) -> redis.Redis:
+        """Establish connection to Redis using redis.asyncio."""
+        try:
+            pool = redis.ConnectionPool(
+                host=self.redis_config.host,
+                port=self.redis_config.port,
+                db=self.redis_config.db,
+                socket_keepalive=True,
+                socket_timeout=10,
+                client_name=self.redis_config.client_name
+            )
+            self.redis_conn = redis.Redis(connection_pool=pool, decode_responses=True)
+            logger.info("Successfully connected to Redis")
+            return self.redis_conn
+        except Exception as e:
+            logger.error(f"Error connecting to Redis: {e}")
+            raise
 
-	async def get_barchart_data_for_ticker(self, ticker: str, target_date: date) -> Dict[str, Any]:
-		"""
-		Get barchart data for a specific ticker, replicating the /historical-gex/{ticker} endpoint logic.
+    async def get_barchart_data_for_ticker(self, ticker: str, target_date: date) -> Dict[str, Any]:
+        """
+        Get barchart data for a specific ticker, replicating the /historical-gex/{ticker} endpoint logic.
 
-		Args:
-			ticker: Ticker symbol (e.g., "SPY")
-			target_date: Date to fetch data for
+        Args:
+            ticker: Ticker symbol (e.g., "SPY")
+            target_date: Date to fetch data for
 
-		Returns:
-			dict: Formatted barchart data for the ticker
-		"""
-		try:
-			# Get current UTC time
-			current_time = datetime.now(timezone.utc)
+        Returns:
+            dict: Formatted barchart data for the ticker
+        """
+        try:
+            # Get current UTC time
+            current_time = datetime.now(timezone.utc)
 
-			# Process each time interval
-			interval_data = {}
+            # Process each time interval
+            interval_data = {}
 
-			async with self.db_pool.acquire() as conn:
-				for interval_min in INTERVALS:
-					# Calculate the target timestamp for this interval
-					if interval_min == 0:
-						interval_label = "current"
-					else:
-						interval_label = f"{interval_min}min_ago"
+            async with self.db_pool.acquire() as conn:
+                for interval_min in INTERVALS:
+                    # Calculate the target timestamp for this interval
+                    if interval_min == 0:
+                        interval_label = "current"
+                    else:
+                        interval_label = f"{interval_min}min_ago"
 
-					target_time = current_time - timedelta(minutes=interval_min)
+                    target_time = current_time - timedelta(minutes=interval_min)
 
-					# SQL query to fetch the most recent GEX data point
-					query = """
+                    # SQL query to fetch the most recent GEX data point
+                    query = """
                         SELECT 
                             timestamp AT TIME ZONE 'UTC' as timestamp, 
                             strikes,
@@ -197,243 +197,239 @@ class BarchartReader:
                         LIMIT 1
                     """
 
-					row = await conn.fetchrow(query, ticker, target_date, target_time)
+                    row = await conn.fetchrow(query, ticker, target_date, target_time)
 
-					# Process the data if available
-					if row:
-						timestamp, strikes_data, spot_price = row
+                    # Process the data if available
+                    if row:
+                        timestamp, strikes_data, spot_price = row
 
-						# Process the strikes data and filter by strike window (0.97% to 1.03% of spot)
-						gex_by_strike = []
-						for strike in strikes_data:
-							# Ensure the list has enough elements
-							if len(strike) >= 7:
-								try:
-									strike_price = float(strike[0])
-									# Filter strikes within 0.97% to 1.03% of spot
-									if (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
-										total_gex = float(strike[3])
-										call_iv = float(strike[4]) if strike[4] is not None else None
-										put_iv = float(strike[5]) if strike[5] is not None else None
-										exposure = float(strike[6]) if strike[6] is not None else None
-										gex_by_strike.append({
-											"strike": strike_price,
-											"gex": total_gex,
-											"call_iv": call_iv,
-											"put_iv": put_iv,
-											"exposure": exposure
-										})
-								except (ValueError, TypeError) as e:
-									logger.warning(f"Error parsing strike data for {ticker}: {strike}, Error: {e}")
-							else:
-								# Handle partial data
-								try:
-									strike_price = float(strike[0]) if len(strike) > 0 else None
-									if strike_price is not None and (spot_price * 0.97) <= strike_price <= (
-											spot_price * 1.03):
-										total_gex = float(strike[3]) if len(strike) > 3 else 0
-										call_iv = None
-										put_iv = None
-										exposure = None
-										gex_by_strike.append({
-											"strike": strike_price,
-											"gex": total_gex,
-											"call_iv": call_iv,
-											"put_iv": put_iv,
-											"exposure": exposure
-										})
-								except (ValueError, TypeError) as e:
-									logger.warning(
-										f"Error parsing partial strike data for {ticker}: {strike}, Error: {e}")
+                        # Process the strikes data and filter by strike window (0.97% to 1.03% of spot)
+                        gex_by_strike = []
+                        for strike in strikes_data:
+                            # Ensure the list has enough elements
+                            if len(strike) >= 7:
+                                try:
+                                    strike_price = float(strike[0])
+                                    # Filter strikes within 0.97% to 1.03% of spot
+                                    if (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
+                                        total_gex = float(strike[3])
+                                        call_iv = float(strike[4]) if strike[4] is not None else None
+                                        put_iv = float(strike[5]) if strike[5] is not None else None
+                                        exposure = float(strike[6]) if strike[6] is not None else None
+                                        gex_by_strike.append({
+                                            "strike": strike_price,
+                                            "gex": total_gex,
+                                            "call_iv": call_iv,
+                                            "put_iv": put_iv,
+                                            "exposure": exposure
+                                        })
+                                except (ValueError, TypeError) as e:
+                                    logger.warning(f"Error parsing strike data for {ticker}: {strike}, Error: {e}")
+                            else:
+                                # Handle partial data
+                                try:
+                                    strike_price = float(strike[0]) if len(strike) > 0 else None
+                                    if strike_price is not None and (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
+                                        total_gex = float(strike[3]) if len(strike) > 3 else 0
+                                        call_iv = None
+                                        put_iv = None
+                                        exposure = None
+                                        gex_by_strike.append({
+                                            "strike": strike_price,
+                                            "gex": total_gex,
+                                            "call_iv": call_iv,
+                                            "put_iv": put_iv,
+                                            "exposure": exposure
+                                        })
+                                except (ValueError, TypeError) as e:
+                                    logger.warning(f"Error parsing partial strike data for {ticker}: {strike}, Error: {e}")
 
-						# Sort by strike price for display
-						sorted_by_strike = sorted(gex_by_strike,
-												  key=lambda x: x["strike"] if x["strike"] is not None else 0)
+                        # Sort by strike price for display
+                        sorted_by_strike = sorted(gex_by_strike, key=lambda x: x["strike"] if x["strike"] is not None else 0)
 
-						# Add to interval data
-						interval_data[interval_label] = {
-							"timestamp": int(timestamp.timestamp() * 1000),  # Milliseconds for JS
-							"strike_data": sorted_by_strike,
-							"spot_price": float(spot_price),
-							"minutes_ago": interval_min
-						}
-					else:
-						# No data found for this interval
-						interval_data[interval_label] = {
-							"timestamp": None,
-							"strike_data": [],
-							"spot_price": None,
-							"minutes_ago": interval_min
-						}
+                        # Add to interval data
+                        interval_data[interval_label] = {
+                            "timestamp": int(timestamp.timestamp() * 1000),  # Milliseconds for JS
+                            "strike_data": sorted_by_strike,
+                            "spot_price": float(spot_price),
+                            "minutes_ago": interval_min
+                        }
+                    else:
+                        # No data found for this interval
+                        interval_data[interval_label] = {
+                            "timestamp": None,
+                            "strike_data": [],
+                            "spot_price": None,
+                            "minutes_ago": interval_min
+                        }
 
-			# Calculate statistics
-			statistics = self.calculate_statistics(interval_data)
+            # Calculate statistics
+            statistics = self.calculate_statistics(interval_data)
 
-			# Compile final response
-			response = {
-				"ticker": ticker,
-				"date": str(target_date),
-				"intervals": interval_data,
-				"statistics": statistics
-			}
+            # Compile final response
+            response = {
+                "ticker": ticker,
+                "date": str(target_date),
+                "intervals": interval_data,
+                "statistics": statistics
+            }
 
-			return response
+            return response
 
-		except Exception as e:
-			logger.error(f"Error fetching barchart data for ticker {ticker}: {e}")
-			return None
+        except Exception as e:
+            logger.error(f"Error fetching barchart data for ticker {ticker}: {e}")
+            return None
 
-	def calculate_statistics(self, interval_data: Dict) -> Dict[str, Any]:
-		"""Calculate summary statistics across all intervals."""
-		stats = {}
+    def calculate_statistics(self, interval_data: Dict) -> Dict[str, Any]:
+        """Calculate summary statistics across all intervals."""
+        stats = {}
 
-		# If we have current data, calculate net, positive, and negative GEX
-		if "current" in interval_data and interval_data["current"]["strike_data"]:
-			current_data = interval_data["current"]["strike_data"]
+        # If we have current data, calculate net, positive, and negative GEX
+        if "current" in interval_data and interval_data["current"]["strike_data"]:
+            current_data = interval_data["current"]["strike_data"]
 
-			net_gex = sum(item["gex"] for item in current_data)
-			positive_gex = sum(item["gex"] for item in current_data if item["gex"] > 0)
-			negative_gex = sum(item["gex"] for item in current_data if item["gex"] < 0)
+            net_gex = sum(item["gex"] for item in current_data)
+            positive_gex = sum(item["gex"] for item in current_data if item["gex"] > 0)
+            negative_gex = sum(item["gex"] for item in current_data if item["gex"] < 0)
 
-			stats["net_gex"] = net_gex
-			stats["positive_gex"] = positive_gex
-			stats["negative_gex"] = negative_gex
+            stats["net_gex"] = net_gex
+            stats["positive_gex"] = positive_gex
+            stats["negative_gex"] = negative_gex
 
-		# Calculate changes between intervals if we have multiple intervals
-		intervals = [k for k in interval_data.keys() if k != "current" and interval_data[k]["strike_data"]]
+        # Calculate changes between intervals if we have multiple intervals
+        intervals = [k for k in interval_data.keys() if k != "current" and interval_data[k]["strike_data"]]
 
-		if "current" in interval_data and intervals:
-			stats["changes"] = {}
+        if "current" in interval_data and intervals:
+            stats["changes"] = {}
 
-			current_strike_map = {item["strike"]: item["gex"] for item in interval_data["current"]["strike_data"]}
+            current_strike_map = {item["strike"]: item["gex"] for item in interval_data["current"]["strike_data"]}
 
-			for interval in intervals:
-				interval_strike_map = {item["strike"]: item["gex"] for item in interval_data[interval]["strike_data"]}
+            for interval in intervals:
+                interval_strike_map = {item["strike"]: item["gex"] for item in interval_data[interval]["strike_data"]}
 
-				# Find common strikes
-				common_strikes = set(current_strike_map.keys()) & set(interval_strike_map.keys())
+                # Find common strikes
+                common_strikes = set(current_strike_map.keys()) & set(interval_strike_map.keys())
 
-				if common_strikes:
-					# Calculate average change
-					changes = [current_strike_map[strike] - interval_strike_map[strike] for strike in common_strikes]
-					avg_change = sum(changes) / len(changes)
+                if common_strikes:
+                    # Calculate average change
+                    changes = [current_strike_map[strike] - interval_strike_map[strike] for strike in common_strikes]
+                    avg_change = sum(changes) / len(changes)
 
-					# Calculate significant changes (> 10%)
-					significant_changes = []
-					for strike in common_strikes:
-						current_gex = current_strike_map[strike]
-						past_gex = interval_strike_map[strike]
+                    # Calculate significant changes (> 10%)
+                    significant_changes = []
+                    for strike in common_strikes:
+                        current_gex = current_strike_map[strike]
+                        past_gex = interval_strike_map[strike]
 
-						if abs(current_gex) > 0 and abs(past_gex) > 0:
-							pct_change = (current_gex - past_gex) / abs(past_gex) * 100
+                        if abs(current_gex) > 0 and abs(past_gex) > 0:
+                            pct_change = (current_gex - past_gex) / abs(past_gex) * 100
 
-							if abs(pct_change) >= 10:
-								significant_changes.append({
-									"strike": strike,
-									"current_gex": current_gex,
-									"past_gex": past_gex,
-									"change": current_gex - past_gex,
-									"pct_change": pct_change
-								})
+                            if abs(pct_change) >= 10:
+                                significant_changes.append({
+                                    "strike": strike,
+                                    "current_gex": current_gex,
+                                    "past_gex": past_gex,
+                                    "change": current_gex - past_gex,
+                                    "pct_change": pct_change
+                                })
 
-					stats["changes"][interval] = {
-						"avg_change": avg_change,
-						"significant_changes": sorted(significant_changes, key=lambda x: abs(x["pct_change"]),
-													  reverse=True)
-					}
+                    stats["changes"][interval] = {
+                        "avg_change": avg_change,
+                        "significant_changes": sorted(significant_changes, key=lambda x: abs(x["pct_change"]), reverse=True)
+                    }
 
-		return stats
+        return stats
 
-	async def publish_barchart_data(self, ticker: str, data: Dict[str, Any]) -> None:
-		"""
-		Publish barchart data to Redis Pub/Sub.
+    async def publish_barchart_data(self, ticker: str, data: Dict[str, Any]) -> None:
+        """
+        Publish barchart data to Redis Pub/Sub.
 
-		Args:
-			ticker: Ticker symbol
-			data: Barchart data to publish
-		"""
-		try:
-			# Format data for Redis (matching the expected SSE format)
-			message = {
-				"msg_type": "barchart_data",
-				"ticker": ticker,
-				"data": data,
-				"timestamp": datetime.now(timezone.utc).isoformat(),
-				"event_id": f"{BARCHART_CHANNEL}:{ticker}:{datetime.now().isoformat()}"
-			}
+        Args:
+            ticker: Ticker symbol
+            data: Barchart data to publish
+        """
+        try:
+            # Format data for Redis (matching the expected SSE format)
+            message = {
+                "msg_type": "barchart_data",
+                "ticker": ticker,
+                "data": data,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event_id": f"{BARCHART_CHANNEL}:{ticker}:{datetime.now().isoformat()}"
+            }
 
-			message_json = json.dumps(message)
+            message_json = json.dumps(message)
 
-			# Publish to the barchart channel
-			await self.redis_conn.publish(BARCHART_CHANNEL, message_json)
+            # Publish to the barchart channel
+            await self.redis_conn.publish(BARCHART_CHANNEL, message_json)
 
-			logger.debug(f"Published barchart data for {ticker} to Redis channel {BARCHART_CHANNEL}")
+            logger.debug(f"Published barchart data for {ticker} to Redis channel {BARCHART_CHANNEL}")
 
-		except Exception as e:
-			logger.error(f"Error publishing barchart data for {ticker} to Redis: {e}")
+        except Exception as e:
+            logger.error(f"Error publishing barchart data for {ticker} to Redis: {e}")
 
-	async def fetch_and_publish_data_loop(self) -> None:
-		"""
-		Continuously fetch and publish barchart data for all tickers.
-		"""
-		try:
-			# Connect to services
-			await self.connect_to_database()
-			await self.connect_to_redis()
+    async def fetch_and_publish_data_loop(self) -> None:
+        """
+        Continuously fetch and publish barchart data for all tickers.
+        """
+        try:
+            # Connect to services
+            await self.connect_to_database()
+            await self.connect_to_redis()
 
-			logger.info(f"Starting barchart data loop for {len(TICKERS)} tickers every {LOOP_SLEEP_TIME} seconds")
+            logger.info(f"Starting barchart data loop for {len(TICKERS)} tickers every {LOOP_SLEEP_TIME} seconds")
 
-			while True:
-				# Get current date
-				target_date = datetime.now(timezone.utc).date()
+            while True:
+                # Get current date
+                target_date = datetime.now(timezone.utc).date()
 
-				# Process each ticker
-				for ticker in TICKERS:
-					try:
-						# Get barchart data for this ticker
-						barchart_data = await self.get_barchart_data_for_ticker(ticker, target_date)
+                # Process each ticker
+                for ticker in TICKERS:
+                    try:
+                        # Get barchart data for this ticker
+                        barchart_data = await self.get_barchart_data_for_ticker(ticker, target_date)
 
-						if barchart_data:
-							# Publish to Redis
-							await self.publish_barchart_data(ticker, barchart_data)
-						else:
-							logger.warning(f"No barchart data found for ticker {ticker}")
+                        if barchart_data:
+                            # Publish to Redis
+                            await self.publish_barchart_data(ticker, barchart_data)
+                        else:
+                            logger.warning(f"No barchart data found for ticker {ticker}")
 
-					except Exception as e:
-						logger.error(f"Error processing ticker {ticker}: {e}")
-						continue
+                    except Exception as e:
+                        logger.error(f"Error processing ticker {ticker}: {e}")
+                        continue
 
-				# Wait before next iteration
-				await asyncio.sleep(LOOP_SLEEP_TIME)
+                # Wait before next iteration
+                await asyncio.sleep(LOOP_SLEEP_TIME)
 
-		except Exception as e:
-			logger.error(f"Error in fetch_and_publish_data_loop: {e}")
-			raise
-		finally:
-			# Clean up resources
-			if self.db_pool:
-				await self.db_pool.close()
-			if self.redis_conn:
-				await self.redis_conn.aclose()
+        except Exception as e:
+            logger.error(f"Error in fetch_and_publish_data_loop: {e}")
+            raise
+        finally:
+            # Clean up resources
+            if self.db_pool:
+                await self.db_pool.close()
+            if self.redis_conn:
+                await self.redis_conn.aclose()
 
 
 async def main() -> None:
-	"""Main function to run the script."""
-	try:
-		# Validate environment variables
-		required_env_vars = ['POSTGRES_DB', 'POSTGRES_HOST', 'REDIS_HOST']
-		missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-		if missing_vars:
-			logger.error(f"Missing required environment variables: {missing_vars}")
-			return
+    """Main function to run the script."""
+    try:
+        # Validate environment variables
+        required_env_vars = ['POSTGRES_DB', 'POSTGRES_HOST', 'REDIS_HOST']
+        missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+        if missing_vars:
+            logger.error(f"Missing required environment variables: {missing_vars}")
+            return
 
-		reader = BarchartReader()
-		await reader.fetch_and_publish_data_loop()
-	except KeyboardInterrupt:
-		logger.info("Process interrupted by user")
-	except Exception as e:
-		logger.error(f"Main error: {e}")
+        reader = BarchartReader()
+        await reader.fetch_and_publish_data_loop()
+    except KeyboardInterrupt:
+        logger.info("Process interrupted by user")
+    except Exception as e:
+        logger.error(f"Main error: {e}")
 
 
 if __name__ == "__main__":
-	asyncio.run(main())
+    asyncio.run(main())
