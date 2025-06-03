@@ -209,44 +209,44 @@ class BarchartReader:
 
                         # Process the strikes data and filter by strike window (0.97% to 1.03% of spot)
                         gex_by_strike = []
-                        for strike in strikes_data:
-                            # Ensure the list has enough elements
-                            if len(strike) >= 7:
+                        if strikes_data:
+                            for strike in strikes_data:
+                                # Skip empty or invalid strike entries
+                                if not strike or len(strike) == 0:
+                                    continue
+
                                 try:
-                                    strike_price = float(strike[0])
-                                    # Filter strikes within 0.97% to 1.03% of spot
-                                    if (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
-                                        total_gex = float(strike[3])
-                                        call_iv = float(strike[4]) if strike[4] is not None else None
-                                        put_iv = float(strike[5]) if strike[5] is not None else None
-                                        exposure = float(strike[6]) if strike[6] is not None else None
-                                        gex_by_strike.append({
-                                            "strike": strike_price,
-                                            "gex": total_gex,
-                                            "call_iv": call_iv,
-                                            "put_iv": put_iv,
-                                            "exposure": exposure
-                                        })
-                                except (ValueError, TypeError) as e:
-                                    logger.warning(f"Error parsing strike data for {ticker}: {strike}, Error: {e}")
-                            else:
-                                # Handle partial data
-                                try:
-                                    strike_price = float(strike[0]) if len(strike) > 0 else None
-                                    if strike_price is not None and (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
-                                        total_gex = float(strike[3]) if len(strike) > 3 else 0
-                                        call_iv = None
-                                        put_iv = None
-                                        exposure = None
-                                        gex_by_strike.append({
-                                            "strike": strike_price,
-                                            "gex": total_gex,
-                                            "call_iv": call_iv,
-                                            "put_iv": put_iv,
-                                            "exposure": exposure
-                                        })
-                                except (ValueError, TypeError) as e:
-                                    logger.warning(f"Error parsing partial strike data for {ticker}: {strike}, Error: {e}")
+                                    # Check if first element is a valid number
+                                    if len(strike) >= 1 and strike[0] not in [None, '', ' ', ',', '.', '-', ']']:
+                                        strike_price = float(strike[0])
+
+                                        # Filter strikes within 0.97% to 1.03% of spot
+                                        if (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
+                                            # Handle full strike data (7+ elements)
+                                            if len(strike) >= 7:
+                                                total_gex = float(strike[3]) if strike[3] not in [None, '', ' ', ',', '.', '-'] else 0
+                                                call_iv = float(strike[4]) if strike[4] not in [None, '', ' ', ',', '.', '-'] else None
+                                                put_iv = float(strike[5]) if strike[5] not in [None, '', ' ', ',', '.', '-'] else None
+                                                exposure = float(strike[6]) if strike[6] not in [None, '', ' ', ',', '.', '-'] else None
+                                            else:
+                                                # Handle partial data
+                                                total_gex = float(strike[3]) if len(strike) > 3 and strike[3] not in [None, '', ' ', ',', '.', '-'] else 0
+                                                call_iv = None
+                                                put_iv = None
+                                                exposure = None
+
+                                            gex_by_strike.append({
+                                                "strike": strike_price,
+                                                "gex": total_gex,
+                                                "call_iv": call_iv,
+                                                "put_iv": put_iv,
+                                                "exposure": exposure
+                                            })
+                                except (ValueError, TypeError, IndexError) as e:
+                                    # Only log if it's not one of the common junk values
+                                    if str(strike[0]) not in [',', ' ', '.', '-', ']', '']:
+                                        logger.debug(f"Skipping invalid strike data for {ticker}: {strike}, Error: {e}")
+                                    continue
 
                         # Sort by strike price for display
                         sorted_by_strike = sorted(gex_by_strike, key=lambda x: x["strike"] if x["strike"] is not None else 0)
