@@ -99,6 +99,68 @@ class RedisConfig:
     client_name: str = REDIS_CLIENT_NAME
 
 
+def get_strike_range_multipliers(spot_price: float) -> tuple[float, float]:
+    """
+    Calculate the strike range multipliers based on spot price.
+
+    Args:
+        spot_price: Current spot price of the underlying
+
+    Returns:
+        tuple: (lower_multiplier, upper_multiplier) for filtering strikes
+    """
+    if spot_price > 1000:
+        # 3% total range (1.5% each side)
+        return (0.985, 1.015)
+    elif spot_price < 500:
+        # 10% total range (5% each side)
+        return (0.95, 1.05)
+    else:
+        # Between 100-1000: 6% total range (3% each side)
+        return (0.97, 1.03)
+
+# Replace the existing strike filtering logic with this:
+def filter_strikes_by_price_range(strikes_array, spot_price):
+    """
+    Filter strikes based on dynamic price range relative to spot price.
+    """
+    gex_by_strike = []
+
+    # Get the appropriate range multipliers for this spot price
+    lower_mult, upper_mult = get_strike_range_multipliers(spot_price)
+
+    for strike in strikes_array:
+        # Skip empty or invalid strike entries
+        if not strike or len(strike) < 4:
+            continue
+
+        try:
+            strike_price = float(strike[0])
+
+            # Filter strikes within the dynamic range
+            if (spot_price * lower_mult) <= strike_price <= (spot_price * upper_mult):
+                total_gex = float(strike[3])  # 4th element is total GEX
+
+                # Set other values to None since the structure doesn't match the original API
+                call_iv = None
+                put_iv = None
+                exposure = None
+
+                gex_by_strike.append({
+                    "strike": strike_price,
+                    "gex": total_gex,
+                    "call_iv": call_iv,
+                    "put_iv": put_iv,
+                    "exposure": exposure
+                })
+
+        except (ValueError, TypeError, IndexError) as e:
+            logger.debug(f"Skipping invalid strike data: {strike}, Error: {e}")
+            continue
+
+    return gex_by_strike
+
+
 class BarchartReader:
     """Class to handle fetching and publishing barchart data from the gexray3 table."""
 
@@ -220,34 +282,8 @@ class BarchartReader:
                             else:
                                 strikes_array = strikes_data
 
-                            for strike in strikes_array:
-                                # Skip empty or invalid strike entries
-                                if not strike or len(strike) < 4:
-                                    continue
-
-                                try:
-                                    strike_price = float(strike[0])
-
-                                    # Filter strikes within 0.97% to 1.03% of spot
-                                    if (spot_price * 0.97) <= strike_price <= (spot_price * 1.03):
-                                        total_gex = float(strike[3])  # 4th element is total GEX
-
-                                        # Set other values to None since the structure doesn't match the original API
-                                        call_iv = None
-                                        put_iv = None
-                                        exposure = None
-
-                                        gex_by_strike.append({
-                                            "strike": strike_price,
-                                            "gex": total_gex,
-                                            "call_iv": call_iv,
-                                            "put_iv": put_iv,
-                                            "exposure": exposure
-                                        })
-
-                                except (ValueError, TypeError, IndexError) as e:
-                                    logger.debug(f"Skipping invalid strike data for {ticker}: {strike}, Error: {e}")
-                                    continue
+                            # Use the new dynamic filtering function
+                            gex_by_strike = filter_strikes_by_price_range(strikes_array, spot_price)
 
                         # Sort by strike price for display
                         sorted_by_strike = sorted(gex_by_strike, key=lambda x: x["strike"] if x["strike"] is not None else 0)
