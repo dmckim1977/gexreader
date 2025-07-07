@@ -26,7 +26,7 @@ load_dotenv()
 
 base_url = os.getenv("THETADATA_URL")
 
-TICKER_LIST: list = ["SPXW", "QQQ", "SPY", "IWM", "VIXW"]
+TICKER_LIST: list = ["SPXW", "QQQ", "SPY", "IWM", "RUTW"]
 EXPIRATION_TYPE: str = "zero"  # options 'friday', or 'zero'
 SLEEP_TIME: int = 5
 RISK_FREE_RATE: float = 0.025
