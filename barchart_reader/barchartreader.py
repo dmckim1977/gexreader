@@ -71,7 +71,7 @@ LOOP_SLEEP_TIME = 2  # 2 seconds between polls
 
 # Tickers to monitor (you can expand this list)
 TICKERS = [
-    "SPXW", "VIX", "RUT", "VXX", "SPY", "QQQ", "IWM", "DIA", "TQQQ",
+    "SPXW", "VIX", "RUTW", "VXX", "SPY", "QQQ", "IWM", "DIA", "TQQQ",
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA",
     "TSLA", "AMD", "PLTR", "SMCI", "MSTR", "COIN", "BABA"
 ]
@@ -114,10 +114,10 @@ def get_strike_range_multipliers(spot_price: float) -> tuple[float, float]:
         return (0.985, 1.015)
     elif spot_price < 500:
         # 10% total range (5% each side)
-        return (0.95, 1.05)
-    else:
-        # Between 100-1000: 6% total range (3% each side)
         return (0.93, 1.07)
+    elif spot_price < 200:
+        # Between 100-1000: 6% total range (3% each side)
+        return (0.90, 1.10)
 
 # Replace the existing strike filtering logic with this:
 def filter_strikes_by_price_range(strikes_array, spot_price):
