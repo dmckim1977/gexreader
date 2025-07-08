@@ -71,7 +71,7 @@ LOOP_SLEEP_TIME = 2  # 2 seconds between polls
 
 # Tickers to monitor (you can expand this list)
 TICKERS = [
-    "SPXW", "VXX", "SPY", "QQQ", "IWM", "DIA", "TQQQ",
+    "SPXW", "VIX", "RUT", "VXX", "SPY", "QQQ", "IWM", "DIA", "TQQQ",
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA",
     "TSLA", "AMD", "PLTR", "SMCI", "MSTR", "COIN", "BABA"
 ]
