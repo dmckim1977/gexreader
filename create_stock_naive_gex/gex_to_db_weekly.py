@@ -35,7 +35,6 @@ STRIKE_LEVELS: int = 50
 DAYS_IN_YEAR_DTE: int = 262
 NY_TIMEZONE = pytz.timezone('America/New_York')
 EXPIRATION_DATETIME: Optional[str] = None
-EXPIRATION_INT: Optional[int] = None
 
 
 async def connect_to_database():
@@ -167,7 +166,7 @@ def get_next_options_expiration(current_date: datetime, ticker: str = None) -> d
 
 
 async def configure():
-    global EXPIRATION_INT, EXPIRATION_DATETIME
+    global EXPIRATION_DATETIME
 
     pool = await connect_to_database()
 
@@ -201,17 +200,11 @@ async def configure():
         raise
 
     EXPIRATION_DATETIME = next_expiration
-    try:
-        EXPIRATION_INT = int(next_expiration.strftime("%Y%m%d"))
-        logger.info(f"EXPIRATION_INT set to: {EXPIRATION_INT}")
-    except ValueError as e:
-        logger.error(f"Error converting expiration to int: {e}")
-        raise
 
     return next_expiration, ny_now, pool, loop
 
 
-async def get_ohlc(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
+async def get_ohlc(root: str, exp: int) -> pd.DataFrame:
     logger.info(f"Fetching OHLC for {root} with expiration {exp}")
     async with httpx.AsyncClient() as client:
         params = {
@@ -230,7 +223,7 @@ async def get_ohlc(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
             return filt
 
 
-async def get_snapshot(root: str, exp: int = EXPIRATION_INT) -> pd.DataFrame:
+async def get_snapshot(root: str, exp: int) -> pd.DataFrame:
     logger.info(f"Fetching snapshot for {root} with expiration {exp}")
     async with httpx.AsyncClient() as client:
         params = {
@@ -659,8 +652,12 @@ async def run(
         pool,
 ):
     try:
+        # Calculate ticker-specific expiration
+        expiration_int = int(exp_to_use.strftime("%Y%m%d"))
+        logger.info(f"Using expiration {expiration_int} for {ticker}")
+        
         # Get option data
-        df = await get_snapshot(ticker, EXPIRATION_INT)
+        df = await get_snapshot(ticker, expiration_int)
         if df is None or df.empty:
             logger.error(f"Failed to get snapshot data for {ticker}")
             return
@@ -672,7 +669,7 @@ async def run(
         df_greeks = calculate_greeks(df_iv, t, RISK_FREE_RATE)
 
         # Get volume data
-        volume = await get_ohlc(ticker, EXPIRATION_INT)
+        volume = await get_ohlc(ticker, expiration_int)
         if volume is None or volume.empty:
             logger.error(f"Failed to get OHLC data for {ticker}")
             return
@@ -754,11 +751,16 @@ async def main():
 
             for ticker in ticker_list:
                 logger.info(f"Starting data collection cycle for {ticker}")
+                
+                # Calculate ticker-specific expiration
+                ticker_expiration = get_next_options_expiration(ny_now, ticker)
+                ticker_time_to_expiration = update_dte(ticker_expiration)
+                
                 data = await run(
                     ticker=ticker,
                     risk_free_rate=RISK_FREE_RATE,
-                    t=time_to_expiration,
-                    exp_to_use=EXPIRATION_INT,
+                    t=ticker_time_to_expiration,
+                    exp_to_use=ticker_expiration,
                     pool=pool,
                 )
 
