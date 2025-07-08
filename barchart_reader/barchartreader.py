@@ -117,7 +117,7 @@ def get_strike_range_multipliers(spot_price: float) -> tuple[float, float]:
         return (0.95, 1.05)
     else:
         # Between 100-1000: 6% total range (3% each side)
-        return (0.97, 1.03)
+        return (0.93, 1.07)
 
 # Replace the existing strike filtering logic with this:
 def filter_strikes_by_price_range(strikes_array, spot_price):
