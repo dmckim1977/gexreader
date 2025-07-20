@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steamroom | Flow Profile</title>
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --background-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #f5f5f5;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            --transition: all 0.3s ease;
+        }
+
+        body.light-mode {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --background-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .chart-wrapper {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .sidebar {
+            width: 280px;
+            background-color: var(--card-bg);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            border-right: 1px solid #444;
+            transition: width 0.3s ease;
+            overflow-y: auto;
+        }
+
+        .sidebar.maximized {
+            width: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .ticker-label {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-group label {
+            font-weight: bold;
+            color: var(--text-color);
+            font-size: 14px;
+        }
+
+        .control-input {
+            padding: 6px;
+            border-radius: 4px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid #444;
+            font-size: 14px;
+        }
+
+        .rolling-window-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .window-button {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .window-button:hover {
+            background-color: #2980b9;
+            transform: translateY(-1px);
+        }
+
+        .window-button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .window-display {
+            background-color: var(--card-bg);
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-weight: bold;
+            color: var(--text-color);
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .sidebar-separator {
+            border: none;
+            border-top: 2px dotted var(--text-color);
+            opacity: 0.5;
+            margin: 10px 0;
+            width: 100%;
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 18px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+        }
+
+        .slider.round {
+            border-radius: 18px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+        }
+
+        input:checked + .slider {
+            background-color: var(--secondary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(18px);
+        }
+
+        .chart-area {
+            flex: 1;
+            position: relative;
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+        }
+
+        .iv-container {
+            height: 200px;
+            position: relative;
+            border-top: 1px solid #444;
+        }
+
+        #main-chart, #iv-chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        .chart-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .stat-value {
+            font-size: 15px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .positive {
+            color: #28a745 !important;
+        }
+
+        .negative {
+            color: #dc3545 !important;
+        }
+
+        .last-update {
+            font-size: 13px;
+            color: var(--text-color);
+            opacity: 0.7;
+            margin-top: 10px;
+        }
+
+        .maximize-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: none;
+            border: none;
+            color: var(--secondary-color);
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 10;
+        }
+
+        .maximize-button:hover {
+            color: #5a9bd5;
+        }
+
+        .ticker-maximized {
+            position: absolute;
+            top: 10px;
+            left: 40px;
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-color);
+            z-index: 10;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .connection-status.connected {
+            background-color: rgba(40, 167, 69, 0.2);
+            border: 1px solid #28a745;
+            color: #28a745;
+        }
+
+        .connection-status.disconnected {
+            background-color: rgba(220, 53, 69, 0.2);
+            border: 1px solid #dc3545;
+            color: #dc3545;
+        }
+
+        .connection-status.reconnecting {
+            background-color: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+            color: #ffc107;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 250px;
+            }
+
+            .sidebar.maximized {
+                width: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-wrapper">
+        <!-- Sidebar with controls and stats -->
+        <div class="sidebar" id="sidebar">
+            <div class="ticker-label" id="ticker-label">Flow Profile</div>
+
+            <div class="connection-status disconnected" id="connection-status">
+                <i class="fas fa-times-circle"></i>
+                <span>Disconnected</span>
+            </div>
+
+            <div class="control-group">
+                <label for="ticker-select">Ticker:</label>
+                <select id="ticker-select" class="control-input">
+                    {% if 'steamroom' in products %}
+                        <!-- Steamroom product tickers -->
+                        <option disabled style="font-weight: bold; background-color: #333">-- Cash/Futures --</option>
+                        <option value="SPXW" selected>SPX</option>
+                        <option value="ES.CME">/ES</option>
+                        <option value="VXX">VXX</option>
+
+                        <option disabled style="font-weight: bold; background-color: #333">---- ETFs ----</option>
+                        <option value="SPY">SPY</option>
+                        <option value="QQQ">QQQ</option>
+                        <option value="IWM">IWM</option>
+                        <option value="DIA">DIA</option>
+                        <option value="TQQQ">TQQQ</option>
+
+                        <option disabled style="font-weight: bold; background-color: #333">---- MAG7 ----</option>
+                        <option value="AAPL">AAPL</option>
+                        <option value="MSFT">MSFT</option>
+                        <option value="AMZN">AMZN</option>
+                        <option value="GOOGL">GOOGL</option>
+                        <option value="META">META</option>
+                        <option value="NVDA">NVDA</option>
+                        <option value="TSLA">TSLA</option>
+
+                        <option disabled style="font-weight: bold; background-color: #333">---- Tech ----</option>
+                        <option value="AMD">AMD</option>
+                        <option value="PLTR">PLTR</option>
+                        <option value="SMCI">SMCI</option>
+                        <option value="MSTR">MSTR</option>
+                        <option value="COIN">COIN</option>
+                        <option value="BABA">BABA</option>
+
+                    {% elif 'futures' in products %}
+                        <!-- Futures product tickers -->
+                        <option disabled style="font-weight: bold; background-color: #333">-- Cash/Futures --</option>
+                        <option value="SPXW" selected>SPX</option>
+                        <option value="ES.CME">/ES</option>
+                        <option value="SPY">SPY</option>
+                        <option value="QQQ">QQQ</option>
+                    {% else %}
+                        <option disabled>-- Subscribe to see Tickers --</option>
+                    {% endif %}
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="mode-select">Analysis Mode:</label>
+                <select id="mode-select" class="control-input">
+                    <option value="premium" selected>Premium</option>
+                    <option value="gex">GEX</option>
+                    <option value="dex">DEX</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="aggregation-select">Aggregation:</label>
+                <select id="aggregation-select" class="control-input">
+                    <option value="5min" selected>5-Minute</option>
+                    <option value="1min">1-Minute</option>
+                    <option value="day">Day</option>
+                </select>
+            </div>
+
+            <div class="control-group" id="gex-view-control" style="display: none;">
+                <label for="gex-view-select">GEX View:</label>
+                <select id="gex-view-select" class="control-input">
+                    <option value="stacked" selected>Stacked (Net)</option>
+                    <option value="separate">Separate (Calls/Puts)</option>
+                </select>
+            </div>
+
+            <hr class="sidebar-separator">
+
+            <div class="theme-toggle">
+                <span>☀️</span>
+                <label class="switch">
+                    <input type="checkbox" id="theme-toggle">
+                    <span class="slider round"></span>
+                </label>
+                <span>🌙</span>
+            </div>
+
+            <div class="chart-stats">
+                <div class="stat-item">
+                    <span class="stat-label" id="primary-stat-label">Net Premium</span>
+                    <span id="primary-stat-value" class="stat-value">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label" id="positive-stat-label">Bullish Premium</span>
+                    <span id="positive-stat-value" class="stat-value positive">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label" id="negative-stat-label">Bearish Premium</span>
+                    <span id="negative-stat-value" class="stat-value negative">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Trades Count</span>
+                    <span id="trades-count" class="stat-value">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Spot Price</span>
+                    <span id="spot-price" class="stat-value">--</span>
+                </div>
+            </div>
+
+            <div class="last-update" id="last-update">Last updated: --</div>
+        </div>
+
+        <!-- Chart area -->
+        <div class="chart-area">
+            <div id="ticker-maximized" class="ticker-maximized" style="display: none;"></div>
+            <button id="maximize-button" class="maximize-button">
+                <i class="fas fa-expand"></i>
+            </button>
+
+            <div class="chart-container">
+                <div id="main-chart"></div>
+            </div>
+
+            <div class="iv-container">
+                <div id="iv-chart"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // State variables
+            let currentTicker = 'SPXW';
+            let currentMode = 'premium';
+            let currentAggregation = '5min';
+            let gexViewMode = 'stacked';
+            let isMaximized = false;
+            let connectionStatus = 'Disconnected';
+            let lastUpdateTime = '--';
+            let chartInitialized = false;
+            let ivChartInitialized = false;
+
+            // Data storage - now stores aggregated flow data instead of individual trades
+            let currentFlowData = null;
+
+            // SSE variables
+            let eventSource = null;
+            let reconnectAttempts = 0;
+            let maxReconnectAttempts = 10;
+            let reconnectDelay = 1000;
+
+            // DOM elements
+            const sidebar = document.getElementById('sidebar');
+            const tickerLabel = document.getElementById('ticker-label');
+            const tickerMaximized = document.getElementById('ticker-maximized');
+            const tickerSelect = document.getElementById('ticker-select');
+            const modeSelect = document.getElementById('mode-select');
+            const aggregationSelect = document.getElementById('aggregation-select');
+            const gexViewControl = document.getElementById('gex-view-control');
+            const gexViewSelect = document.getElementById('gex-view-select');
+            const themeToggle = document.getElementById('theme-toggle');
+            const maximizeButton = document.getElementById('maximize-button');
+            const connectionStatusDiv = document.getElementById('connection-status');
+            const lastUpdateDiv = document.getElementById('last-update');
+
+            // Format numbers
+            function formatNumber(num, decimals = 2) {
+                if (num === null || num === undefined || isNaN(num)) return '--';
+                if (Math.abs(num) >= 1e9) return (num / 1e9).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + 'B';
+                if (Math.abs(num) >= 1e6) return (num / 1e6).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + 'M';
+                if (Math.abs(num) >= 1e3) return (num / 1e3).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + 'K';
+                return num.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+            }
+
+            // Update connection status
+            function updateConnectionStatus(status) {
+                connectionStatus = status;
+                connectionStatusDiv.className = `connection-status ${status.toLowerCase()}`;
+
+                const icon = connectionStatusDiv.querySelector('i');
+                const text = connectionStatusDiv.querySelector('span');
+
+                switch(status) {
+                    case 'connected':
+                        icon.className = 'fas fa-circle';
+                        text.textContent = 'Live Connected';
+                        break;
+                    case 'disconnected':
+                        icon.className = 'fas fa-times-circle';
+                        text.textContent = 'Disconnected';
+                        break;
+                    case 'reconnecting':
+                        icon.className = 'fas fa-sync fa-spin';
+                        text.textContent = 'Reconnecting...';
+                        break;
+                }
+            }
+
+            // Update last update time
+            function updateLastUpdateTime() {
+                const now = new Date();
+                lastUpdateTime = now.toLocaleTimeString();
+                lastUpdateDiv.textContent = `Last updated: ${lastUpdateTime}`;
+            }
+
+            // Update mode-specific UI elements
+            function updateModeUI() {
+                const primaryStatLabel = document.getElementById('primary-stat-label');
+                const positiveStatLabel = document.getElementById('positive-stat-label');
+                const negativeStatLabel = document.getElementById('negative-stat-label');
+
+                // Show/hide GEX view control
+                gexViewControl.style.display = currentMode === 'gex' ? 'block' : 'none';
+
+                // Update stat labels based on mode
+                switch(currentMode) {
+                    case 'premium':
+                        primaryStatLabel.textContent = 'Net Premium';
+                        positiveStatLabel.textContent = 'Bullish Premium';
+                        negativeStatLabel.textContent = 'Bearish Premium';
+                        break;
+                    case 'gex':
+                        primaryStatLabel.textContent = 'Net GEX';
+                        positiveStatLabel.textContent = 'Positive GEX';
+                        negativeStatLabel.textContent = 'Negative GEX';
+                        break;
+                    case 'dex':
+                        primaryStatLabel.textContent = 'Net DEX';
+                        positiveStatLabel.textContent = 'Positive DEX';
+                        negativeStatLabel.textContent = 'Negative DEX';
+                        break;
+                }
+            }
+
+            // Map aggregation to Redis channel suffix
+            function getWindowSuffix(aggregation) {
+                return aggregation; // Direct mapping: '1min', '5min', 'day'
+            }
+
+            // Initialize SSE connection for flow profile aggregated data
+            function initSSE(ticker) {
+                if (eventSource) {
+                    eventSource.close();
+                }
+
+                if (!ticker) {
+                    updateConnectionStatus('disconnected');
+                    return;
+                }
+
+                updateConnectionStatus('reconnecting');
+
+                try {
+                    const windowSuffix = getWindowSuffix(currentAggregation);
+                    const sseUrl = `https://live.steamroomtrading.com/sse/flow_profile/${ticker}/${currentMode}/${windowSuffix}`;
+                    eventSource = new EventSource(sseUrl);
+
+                    eventSource.onopen = function() {
+                        console.log(`Flow profile SSE connection opened for ${ticker}/${currentMode}/${currentAggregation}`);
+                        updateConnectionStatus('connected');
+                        reconnectAttempts = 0;
+                    };
+
+                    eventSource.onmessage = function(event) {
+                        try {
+                            const flowData = JSON.parse(event.data);
+                            handleNewFlowData(flowData);
+                        } catch (error) {
+                            console.error('Error parsing flow data:', error);
+                        }
+                    };
+
+                    eventSource.onerror = function() {
+                        console.error('Flow profile SSE connection error');
+                        updateConnectionStatus('disconnected');
+                        eventSource.close();
+
+                        // Attempt to reconnect with exponential backoff
+                        if (reconnectAttempts < maxReconnectAttempts) {
+                            const delay = reconnectDelay * Math.pow(2, reconnectAttempts);
+                            console.log(`Attempting to reconnect in ${delay}ms...`);
+                            setTimeout(() => {
+                                reconnectAttempts++;
+                                initSSE(ticker);
+                            }, delay);
+                        }
+                    };
+
+                } catch (error) {
+                    console.error('Error initializing flow profile SSE:', error);
+                    updateConnectionStatus('disconnected');
+                }
+            }
+
+            // Handle new aggregated flow data
+            function handleNewFlowData(flowData) {
+                // Verify data is for current ticker and mode
+                if (flowData.ticker !== currentTicker || flowData.mode !== currentMode) {
+                    return;
+                }
+
+                currentFlowData = flowData;
+                updateCharts();
+                updateLastUpdateTime();
+            }
+
+            // Update charts based on current aggregated data
+            function updateCharts() {
+                if (!currentFlowData) {
+                    return;
+                }
+
+                switch(currentMode) {
+                    case 'premium':
+                        updatePremiumChart(currentFlowData);
+                        break;
+                    case 'gex':
+                        updateGexChart(currentFlowData);
+                        break;
+                    case 'dex':
+                        updateDexChart(currentFlowData);
+                        break;
+                }
+
+                updateStats(currentFlowData);
+            }
+
+            // Update premium chart with aggregated flow data
+            function updatePremiumChart(flowData) {
+                if (!flowData || !flowData.strikes || Object.keys(flowData.strikes).length === 0) {
+                    if (chartInitialized) {
+                        Plotly.react('main-chart', [], getChartLayout('No premium data available'));
+                    }
+                    return;
+                }
+
+                // Extract data from aggregated flow structure
+                // Convert strike keys from "6210000" format to 6210 (divide by 1000)
+                const strikes = Object.keys(flowData.strikes).map(key => Number(key) / 1000).sort((a, b) => a - b);
+
+                // Calculate net premium: if net is 0, use calls + puts, otherwise use net
+                const netPremiums = strikes.map(strike => {
+                    const strikeKey = (strike * 1000).toString();
+                    const strikeData = flowData.strikes[strikeKey];
+                    if (strikeData.net !== 0) {
+                        return strikeData.net;
+                    }
+                    // Fallback: use calls + puts if net is 0
+                    return strikeData.calls + strikeData.puts;
+                });
+                const formattedPremiums = netPremiums.map(val => formatNumber(val, 0));
+
+                // Create the trace
+                const trace = {
+                    x: netPremiums,
+                    y: strikes,
+                    customdata: formattedPremiums,
+                    type: 'bar',
+                    orientation: 'h',
+                    name: 'Net Premium',
+                    marker: {
+                        color: netPremiums.map(val => val >= 0 ? '#28a745' : '#dc3545')
+                    },
+                    width: 0.6,
+                    hovertemplate: '$%{customdata}<extra></extra>'
+                };
+
+                const windowText = getWindowText(flowData.window_minutes);
+                const layout = getChartLayout(`${currentTicker} - Premium Flow (${windowText})`, flowData.spot_price);
+                layout.xaxis.title = 'Net Premium ($)';
+
+                if (!chartInitialized) {
+                    Plotly.newPlot('main-chart', [trace], layout, getChartConfig()).then(() => {
+                        chartInitialized = true;
+                    });
+                } else {
+                    Plotly.react('main-chart', [trace], layout, getChartConfig());
+                }
+
+                // Update stats with aggregated totals
+                updatePremiumStats(flowData.totals);
+            }
+
+            // Update premium statistics with aggregated data
+            function updatePremiumStats(totals) {
+                document.getElementById('primary-stat-value').textContent = formatNumber(totals.net, 0);
+                document.getElementById('primary-stat-value').className = totals.net >= 0 ? 'stat-value positive' : 'stat-value negative';
+                document.getElementById('positive-stat-value').textContent = formatNumber(totals.bullish || totals.positive, 0);
+                document.getElementById('negative-stat-value').textContent = formatNumber(totals.bearish || totals.negative, 0);
+                document.getElementById('trades-count').textContent = totals.trades_count;
+                document.getElementById('spot-price').textContent = currentFlowData.spot_price ? formatNumber(currentFlowData.spot_price, 2) : '--';
+            }
+
+            // Update GEX chart with aggregated flow data
+            function updateGexChart(flowData) {
+                if (!flowData || !flowData.strikes || Object.keys(flowData.strikes).length === 0) {
+                    if (chartInitialized) {
+                        Plotly.react('main-chart', [], getChartLayout('No GEX data available'));
+                    }
+                    return;
+                }
+
+                // Extract data from aggregated flow structure
+                // Convert strike keys from "6210000" format to 6210 (divide by 1000)
+                const strikes = Object.keys(flowData.strikes).map(key => Number(key) / 1000).sort((a, b) => a - b);
+                let traces = [];
+
+                if (gexViewMode === 'stacked') {
+                    // Stacked view: show net GEX
+                    const netGex = strikes.map(strike => {
+                        const strikeKey = (strike * 1000).toString();
+                        const strikeData = flowData.strikes[strikeKey];
+                        return strikeData.net !== 0 ? strikeData.net : (strikeData.calls + strikeData.puts);
+                    });
+                    const formattedGex = netGex.map(val => formatNumber(val, 0));
+
+                    traces.push({
+                        x: netGex,
+                        y: strikes,
+                        customdata: formattedGex,
+                        type: 'bar',
+                        orientation: 'h',
+                        name: 'Net GEX',
+                        marker: {
+                            color: netGex.map(val => val >= 0 ? '#28a745' : '#dc3545')
+                        },
+                        width: 0.6,
+                        hovertemplate: '%{customdata}<extra></extra>'
+                    });
+                } else {
+                    // Separate view: show calls and puts separately
+                    const callsGex = strikes.map(strike => {
+                        const strikeKey = (strike * 1000).toString();
+                        return flowData.strikes[strikeKey].calls;
+                    });
+                    const putsGex = strikes.map(strike => {
+                        const strikeKey = (strike * 1000).toString();
+                        return flowData.strikes[strikeKey].puts;
+                    });
+                    const formattedCallsGex = callsGex.map(val => formatNumber(val, 0));
+                    const formattedPutsGex = putsGex.map(val => formatNumber(val, 0));
+
+                    traces.push({
+                        x: callsGex,
+                        y: strikes,
+                        customdata: formattedCallsGex,
+                        type: 'bar',
+                        orientation: 'h',
+                        name: 'Calls GEX',
+                        marker: { color: '#28a745' },
+                        width: 0.4,
+                        offsetgroup: 'calls',
+                        hovertemplate: 'Calls: %{customdata}<extra></extra>'
+                    });
+
+                    traces.push({
+                        x: putsGex,
+                        y: strikes,
+                        customdata: formattedPutsGex,
+                        type: 'bar',
+                        orientation: 'h',
+                        name: 'Puts GEX',
+                        marker: { color: '#dc3545' },
+                        width: 0.4,
+                        offsetgroup: 'puts',
+                        hovertemplate: 'Puts: %{customdata}<extra></extra>'
+                    });
+                }
+
+                const windowText = getWindowText(flowData.window_minutes);
+                const layout = getChartLayout(`${currentTicker} - GEX Flow (${windowText})`, flowData.spot_price);
+                layout.xaxis.title = 'Gamma Exposure (GEX)';
+                layout.showlegend = gexViewMode === 'separate';
+
+                if (!chartInitialized) {
+                    Plotly.newPlot('main-chart', traces, layout, getChartConfig()).then(() => {
+                        chartInitialized = true;
+                    });
+                } else {
+                    Plotly.react('main-chart', traces, layout, getChartConfig());
+                }
+
+                // Update stats with aggregated totals
+                updateGexStats(flowData.totals);
+            }
+
+            // Update GEX statistics with aggregated data
+            function updateGexStats(totals) {
+                document.getElementById('primary-stat-value').textContent = formatNumber(totals.net, 0);
+                document.getElementById('primary-stat-value').className = totals.net >= 0 ? 'stat-value positive' : 'stat-value negative';
+                document.getElementById('positive-stat-value').textContent = formatNumber(totals.positive, 0);
+                document.getElementById('negative-stat-value').textContent = formatNumber(totals.negative, 0);
+                document.getElementById('trades-count').textContent = totals.trades_count;
+                document.getElementById('spot-price').textContent = currentFlowData.spot_price ? formatNumber(currentFlowData.spot_price, 2) : '--';
+            }
+
+            // Update DEX chart with aggregated flow data
+            function updateDexChart(flowData) {
+                if (!flowData || !flowData.strikes || Object.keys(flowData.strikes).length === 0) {
+                    if (chartInitialized) {
+                        Plotly.react('main-chart', [], getChartLayout('No DEX data available'));
+                    }
+                    return;
+                }
+
+                // Extract data from aggregated flow structure
+                // Convert strike keys from "6210000" format to 6210 (divide by 1000)
+                const strikes = Object.keys(flowData.strikes).map(key => Number(key) / 1000).sort((a, b) => a - b);
+                const netDex = strikes.map(strike => {
+                    const strikeKey = (strike * 1000).toString();
+                    const strikeData = flowData.strikes[strikeKey];
+                    return strikeData.net !== 0 ? strikeData.net : (strikeData.calls + strikeData.puts);
+                });
+                const formattedDex = netDex.map(val => formatNumber(val, 0));
+
+                const traces = [{
+                    x: netDex,
+                    y: strikes,
+                    customdata: formattedDex,
+                    type: 'bar',
+                    orientation: 'h',
+                    name: 'Net DEX',
+                    marker: {
+                        color: netDex.map(val => val >= 0 ? '#28a745' : '#dc3545')
+                    },
+                    width: 0.6,
+                    hovertemplate: '%{customdata}<extra></extra>'
+                }];
+
+                const windowText = getWindowText(flowData.window_minutes);
+                const layout = getChartLayout(`${currentTicker} - DEX Flow (${windowText})`, flowData.spot_price);
+                layout.xaxis.title = 'Delta Exposure (DEX)';
+                layout.showlegend = false;
+
+                if (!chartInitialized) {
+                    Plotly.newPlot('main-chart', traces, layout, getChartConfig()).then(() => {
+                        chartInitialized = true;
+                    });
+                } else {
+                    Plotly.react('main-chart', traces, layout, getChartConfig());
+                }
+
+                // Update stats with aggregated totals
+                updateDexStats(flowData.totals);
+            }
+
+            // Update DEX statistics with aggregated data
+            function updateDexStats(totals) {
+                document.getElementById('primary-stat-value').textContent = formatNumber(totals.net, 0);
+                document.getElementById('primary-stat-value').className = totals.net >= 0 ? 'stat-value positive' : 'stat-value negative';
+                document.getElementById('positive-stat-value').textContent = formatNumber(totals.positive, 0);
+                document.getElementById('negative-stat-value').textContent = formatNumber(totals.negative, 0);
+                document.getElementById('trades-count').textContent = totals.trades_count;
+                document.getElementById('spot-price').textContent = currentFlowData.spot_price ? formatNumber(currentFlowData.spot_price, 2) : '--';
+            }
+
+            // Convert window minutes to readable text
+            function getWindowText(windowMinutes) {
+                if (windowMinutes === 0) return 'day';
+                if (windowMinutes === 1) return '1min';
+                if (windowMinutes === 5) return '5min';
+                return `${windowMinutes}min`;
+            }
+
+            // Update IV chart with calls and puts
+            function updateIVChart(trades) {
+                if (trades.length === 0) {
+                    if (ivChartInitialized) {
+                        Plotly.react('iv-chart', [], getIVChartLayout('No IV data available'));
+                    }
+                    return;
+                }
+
+                // Aggregate IV data by strike and side, keeping the latest value
+                const ivData = {};
+
+                trades.forEach(trade => {
+                    const strike = trade.strike;
+                    const iv = trade.implied_vol_calc;
+                    const side = trade.side;
+
+                    if (iv && strike) {
+                        const key = `${strike}_${side}`;
+                        if (!ivData[key] || new Date(trade.trade_datetime) > new Date(ivData[key].timestamp)) {
+                            ivData[key] = {
+                                strike: strike,
+                                iv: iv * 100, // Convert to percentage
+                                side: side,
+                                timestamp: trade.trade_datetime
+                            };
+                        }
+                    }
+                });
+
+                // Separate calls and puts
+                const callsData = Object.values(ivData).filter(d => d.side === 'C').sort((a, b) => a.strike - b.strike);
+                const putsData = Object.values(ivData).filter(d => d.side === 'P').sort((a, b) => a.strike - b.strike);
+
+                const traces = [];
+
+                // Calls trace (green dots)
+                if (callsData.length > 0) {
+                    traces.push({
+                        x: callsData.map(d => d.strike),
+                        y: callsData.map(d => d.iv),
+                        customdata: callsData.map(d => `${d.iv.toFixed(1)}%`),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Calls IV',
+                        marker: {
+                            color: '#28a745',
+                            size: 8,
+                            symbol: 'circle'
+                        },
+                        hovertemplate: 'Strike: %{x}<br>IV: %{customdata}<extra></extra>'
+                    });
+                }
+
+                // Puts trace (red dots)
+                if (putsData.length > 0) {
+                    traces.push({
+                        x: putsData.map(d => d.strike),
+                        y: putsData.map(d => d.iv),
+                        customdata: putsData.map(d => `${d.iv.toFixed(1)}%`),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Puts IV',
+                        marker: {
+                            color: '#dc3545',
+                            size: 8,
+                            symbol: 'circle'
+                        },
+                        hovertemplate: 'Strike: %{x}<br>IV: %{customdata}<extra></extra>'
+                    });
+                }
+
+                const layout = getIVChartLayout(`Implied Volatility by Strike`);
+
+                if (!ivChartInitialized) {
+                    Plotly.newPlot('iv-chart', traces, layout, getChartConfig()).then(() => {
+                        ivChartInitialized = true;
+                    });
+                } else {
+                    Plotly.react('iv-chart', traces, layout, getChartConfig());
+                }
+            }
+
+            // Get IV chart layout configuration
+            function getIVChartLayout(title) {
+                const isDarkMode = themeToggle.checked;
+
+                return {
+                    title: {
+                        text: title,
+                        font: { size: 12, color: isDarkMode ? '#f5f5f5' : '#333333' }
+                    },
+                    xaxis: {
+                        title: 'Strike Price',
+                        gridcolor: isDarkMode ? '#333' : '#ddd',
+                        autorange: true
+                    },
+                    yaxis: {
+                        title: 'Implied Volatility (%)',
+                        gridcolor: isDarkMode ? '#333' : '#ddd',
+                        autorange: true
+                    },
+                    hovermode: 'closest',
+                    hoverlabel: {
+                        bgcolor: isDarkMode ? '#333' : '#fff',
+                        font: { color: isDarkMode ? '#f5f5f5' : '#333333' },
+                        namelength: -1
+                    },
+                    uirevision: true,
+                    margin: { l: 50, r: 50, t: 40, b: 40 },
+                    paper_bgcolor: isDarkMode ? '#1e1e1e' : '#ffffff',
+                    plot_bgcolor: isDarkMode ? '#1e1e1e' : '#ffffff',
+                    font: { color: isDarkMode ? '#f5f5f5' : '#333333' },
+                    showlegend: true,
+                    legend: {
+                        x: 0,
+                        y: 1,
+                        xanchor: 'left',
+                        yanchor: 'top',
+                        bgcolor: 'rgba(0, 0, 0, 0)',
+                        font: {
+                            color: isDarkMode ? '#f5f5f5' : '#333333',
+                            size: 10
+                        }
+                    },
+                    autosize: true,
+                    dragmode: 'pan'
+                };
+            }
+
+            function updateStats(trades) {
+                // This function will be replaced by mode-specific stat updates
+                if (currentMode === 'premium' || currentMode === 'gex' || currentMode === 'dex') {
+                    // Stats are updated within their respective chart update functions
+                    return;
+                }
+                document.getElementById('trades-count').textContent = trades.length;
+            }
+
+            // Get chart layout configuration
+            function getChartLayout(title, spotPrice = null) {
+                const isDarkMode = themeToggle.checked;
+
+                const layout = {
+                    title: {
+                        text: title,
+                        font: { size: 14, color: isDarkMode ? '#f5f5f5' : '#333333' }
+                    },
+                    xaxis: {
+                        zeroline: true,
+                        zerolinecolor: '#888',
+                        gridcolor: isDarkMode ? '#333' : '#ddd',
+                        title: 'Value'
+                    },
+                    yaxis: {
+                        title: 'Strike Price',
+                        gridcolor: isDarkMode ? '#333' : '#ddd',
+                        autorange: true
+                    },
+                    hovermode: 'y unified',
+                    hoverlabel: {
+                        bgcolor: isDarkMode ? '#333' : '#fff',
+                        font: { color: isDarkMode ? '#f5f5f5' : '#333333' },
+                        namelength: -1
+                    },
+                    uirevision: true,
+                    margin: { l: 60, r: 60, t: 60, b: 60 },
+                    paper_bgcolor: isDarkMode ? '#1e1e1e' : '#ffffff',
+                    plot_bgcolor: isDarkMode ? '#1e1e1e' : '#ffffff',
+                    font: { color: isDarkMode ? '#f5f5f5' : '#333333' },
+                    showlegend: false,
+                    autosize: true,
+                    dragmode: 'pan'
+                };
+
+                // Add spot price line if available
+                if (spotPrice) {
+                    layout.shapes = [{
+                        type: 'line',
+                        x0: 0,
+                        x1: 1,
+                        xref: 'paper',
+                        y0: spotPrice,
+                        y1: spotPrice,
+                        line: { color: '#FFFFFF', width: 2, dash: 'dot' }
+                    }];
+
+                    layout.annotations = [{
+                        x: 0,
+                        y: spotPrice,
+                        xref: 'paper',
+                        yref: 'y',
+                        text: `${spotPrice.toFixed(2)}`,
+                        showarrow: false,
+                        font: { color: '#FFFFFF', size: 12 },
+                        xanchor: 'left',
+                        yanchor: 'middle'
+                    }];
+                }
+
+                return layout;
+            }
+
+            // Get chart configuration
+            function getChartConfig() {
+                return {
+                    responsive: true,
+                    scrollZoom: true,
+                    displayModeBar: false,
+                    displaylogo: false
+                };
+            }
+
+            // Event listeners
+            tickerSelect.addEventListener('change', function() {
+                const newTicker = this.value;
+                if (newTicker !== currentTicker) {
+                    currentTicker = newTicker;
+                    tickerLabel.textContent = currentTicker;
+                    tickerMaximized.textContent = currentTicker;
+
+                    // Clear existing flow data when switching tickers
+                    currentFlowData = null;
+
+                    // Reconnect with new ticker
+                    initSSE(currentTicker);
+
+                    // Update charts with empty data
+                    updateCharts();
+                }
+            });
+
+            modeSelect.addEventListener('change', function() {
+                currentMode = this.value;
+                updateModeUI();
+
+                // Reconnect SSE with new mode
+                initSSE(currentTicker);
+            });
+
+            aggregationSelect.addEventListener('change', function() {
+                currentAggregation = this.value;
+
+                // Reconnect SSE with new aggregation
+                initSSE(currentTicker);
+            });
+
+            gexViewSelect.addEventListener('change', function() {
+                gexViewMode = this.value;
+                if (currentMode === 'gex') {
+                    updateCharts();
+                }
+            });
+
+            maximizeButton.addEventListener('click', function() {
+                isMaximized = !isMaximized;
+                sidebar.classList.toggle('maximized', isMaximized);
+                tickerMaximized.style.display = isMaximized ? 'block' : 'none';
+                maximizeButton.innerHTML = isMaximized ?
+                    '<i class="fas fa-compress"></i>' :
+                    '<i class="fas fa-expand"></i>';
+
+                if (chartInitialized) {
+                    Plotly.Plots.resize('main-chart');
+                }
+                if (ivChartInitialized) {
+                    Plotly.Plots.resize('iv-chart');
+                }
+            });
+
+            // Initialize theme toggle
+            function initThemeToggle() {
+                const initialDarkMode = localStorage.getItem('darkMode') === 'true' ||
+                    (localStorage.getItem('darkMode') === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                themeToggle.checked = initialDarkMode;
+                document.body.classList.toggle('light-mode', !initialDarkMode);
+
+                themeToggle.addEventListener('change', function() {
+                    document.body.classList.toggle('light-mode', !this.checked);
+                    localStorage.setItem('darkMode', this.checked);
+
+                    // Redraw charts with new theme
+                    if (chartInitialized || ivChartInitialized) {
+                        updateCharts();
+                    }
+                });
+            }
+
+            // Initialize
+            updateModeUI();
+            initThemeToggle();
+
+            // Set initial ticker and connect
+            tickerLabel.textContent = currentTicker;
+            tickerMaximized.textContent = currentTicker;
+            initSSE(currentTicker);
+
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                if (chartInitialized) {
+                    Plotly.Plots.resize('main-chart');
+                }
+                if (ivChartInitialized) {
+                    Plotly.Plots.resize('iv-chart');
+                }
+            });
+
+            // Clean up on unload
+            window.addEventListener('beforeunload', function() {
+                if (eventSource) {
+                    eventSource.close();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

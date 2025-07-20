@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingView Chart</title>
+    <script src="https://unpkg.com/lightweight-charts@5/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #131722;
+            font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif;
+            color: #d1d4dc;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Top Controls Bar */
+        .top-controls {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+            height: 32px;
+        }
+
+        /* Ticker Selector */
+        .ticker-selector {
+            position: relative;
+            min-width: 140px;
+        }
+
+        .ticker-input {
+            background: rgba(42, 46, 57, 0.9);
+            border: 1px solid #434651;
+            border-radius: 4px;
+            color: #d1d4dc;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 32px 6px 8px;
+            width: 100%;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .ticker-input:focus {
+            border-color: #2962ff;
+            background: rgba(42, 46, 57, 1);
+        }
+
+        .ticker-input::placeholder {
+            color: #868993;
+        }
+
+        .ticker-dropdown-arrow {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid #868993;
+            pointer-events: none;
+        }
+
+        .ticker-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #2a2e39;
+            border: 1px solid #434651;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1001;
+        }
+
+        .ticker-dropdown.show {
+            display: block;
+        }
+
+        .ticker-group-header {
+            padding: 8px 12px 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #868993;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #1e222d;
+            border-bottom: 1px solid #363a45;
+        }
+
+        .ticker-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            border-bottom: 1px solid #363a45;
+            transition: background-color 0.1s;
+        }
+
+        .ticker-option:hover {
+            background: #363a45;
+        }
+
+        .ticker-option:last-child {
+            border-bottom: none;
+        }
+
+        .ticker-option.disabled {
+            color: #5d606b;
+            cursor: not-allowed;
+            background: #1e222d;
+        }
+
+        .ticker-option.disabled:hover {
+            background: #1e222d;
+        }
+
+        /* Feature Toggle Buttons */
+        .feature-toggles {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .feature-btn {
+            background: rgba(42, 46, 57, 0.9);
+            border: 1px solid #434651;
+            border-radius: 4px;
+            color: #d1d4dc;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .feature-btn:hover {
+            background: rgba(54, 58, 69, 0.9);
+            border-color: #5a5f6b;
+        }
+
+        .feature-btn.active {
+            background: #2962ff;
+            border-color: #2962ff;
+            color: white;
+        }
+
+        .feature-btn.active:hover {
+            background: #1e53e5;
+            border-color: #1e53e5;
+        }
+
+        /* Price Display */
+        .price-display {
+            background: rgba(42, 46, 57, 0.9);
+            border: 1px solid #434651;
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4caf50;
+        }
+
+        /* Scrollbar styling for dropdown */
+        .ticker-dropdown::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .ticker-dropdown::-webkit-scrollbar-track {
+            background: #2a2e39;
+        }
+
+        .ticker-dropdown::-webkit-scrollbar-thumb {
+            background: #434651;
+            border-radius: 3px;
+        }
+
+        .ticker-dropdown::-webkit-scrollbar-thumb:hover {
+            background: #5a5f6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <div class="top-controls">
+            <!-- Ticker Selector -->
+            <div class="ticker-selector">
+                <input type="text" class="ticker-input" placeholder="Search ticker..." id="ticker-input" autocomplete="off">
+                <div class="ticker-dropdown-arrow"></div>
+                <div class="ticker-dropdown" id="ticker-dropdown">
+                    <div class="ticker-group-header">Cash/Futures</div>
+                    <div class="ticker-option" data-ticker="SPXW">SPX</div>
+                    <div class="ticker-option" data-ticker="ES.CME">/ES</div>
+                    <div class="ticker-option" data-ticker="VXX">VXX</div>
+
+                    <div class="ticker-group-header">ETFs</div>
+                    <div class="ticker-option" data-ticker="SPY">SPY</div>
+                    <div class="ticker-option" data-ticker="QQQ">QQQ</div>
+                    <div class="ticker-option" data-ticker="IWM">IWM</div>
+                    <div class="ticker-option" data-ticker="DIA">DIA</div>
+                    <div class="ticker-option" data-ticker="TQQQ">TQQQ</div>
+
+                    <div class="ticker-group-header">MAG7</div>
+                    <div class="ticker-option" data-ticker="AAPL">AAPL</div>
+                    <div class="ticker-option" data-ticker="MSFT">MSFT</div>
+                    <div class="ticker-option" data-ticker="AMZN">AMZN</div>
+                    <div class="ticker-option" data-ticker="GOOGL">GOOGL</div>
+                    <div class="ticker-option" data-ticker="META">META</div>
+                    <div class="ticker-option" data-ticker="NVDA">NVDA</div>
+                    <div class="ticker-option" data-ticker="TSLA">TSLA</div>
+
+                    <div class="ticker-group-header">Tech</div>
+                    <div class="ticker-option" data-ticker="AMD">AMD</div>
+                    <div class="ticker-option" data-ticker="PLTR">PLTR</div>
+                    <div class="ticker-option" data-ticker="SMCI">SMCI</div>
+                    <div class="ticker-option" data-ticker="MSTR">MSTR</div>
+                    <div class="ticker-option" data-ticker="COIN">COIN</div>
+                    <div class="ticker-option" data-ticker="BABA">BABA</div>
+                </div>
+            </div>
+
+            <!-- Price Display -->
+            <div class="price-display" id="price-display">
+                $148.24
+            </div>
+
+            <!-- Feature Toggle Buttons -->
+            <div class="feature-toggles">
+                <div class="feature-btn" id="wiseguy-alerts" data-feature="wiseguy">
+                    Wiseguy Alerts
+                </div>
+                <div class="feature-btn" id="htf-gex" data-feature="htf-gex">
+                    HTF Gex
+                </div>
+                <div class="feature-btn" id="expected-moves" data-feature="expected-moves">
+                    Expected Moves
+                </div>
+                <div class="feature-btn" id="dte-gex" data-feature="0dte-gex">
+                    0DTE Gex
+                </div>
+            </div>
+        </div>
+
+        <div id="chart"></div>
+    </div>
+
+    <script>
+        let chart;
+        let candlestickSeries;
+        let volumeSeries;
+        let ma20Series;
+        let ma50Series;
+        let currentTicker = 'SPY';
+        let activeFeatures = new Set();
+
+        // Ticker data structure
+        const tickerGroups = [
+            {
+                name: 'Cash/Futures',
+                tickers: [
+                    { symbol: 'SPXW', display: 'SPX' },
+                    { symbol: 'ES.CME', display: '/ES' },
+                    { symbol: 'VXX', display: 'VXX' }
+                ]
+            },
+            {
+                name: 'ETFs',
+                tickers: [
+                    { symbol: 'SPY', display: 'SPY' },
+                    { symbol: 'QQQ', display: 'QQQ' },
+                    { symbol: 'IWM', display: 'IWM' },
+                    { symbol: 'DIA', display: 'DIA' },
+                    { symbol: 'TQQQ', display: 'TQQQ' }
+                ]
+            },
+            {
+                name: 'MAG7',
+                tickers: [
+                    { symbol: 'AAPL', display: 'AAPL' },
+                    { symbol: 'MSFT', display: 'MSFT' },
+                    { symbol: 'AMZN', display: 'AMZN' },
+                    { symbol: 'GOOGL', display: 'GOOGL' },
+                    { symbol: 'META', display: 'META' },
+                    { symbol: 'NVDA', display: 'NVDA' },
+                    { symbol: 'TSLA', display: 'TSLA' }
+                ]
+            },
+            {
+                name: 'Tech',
+                tickers: [
+                    { symbol: 'AMD', display: 'AMD' },
+                    { symbol: 'PLTR', display: 'PLTR' },
+                    { symbol: 'SMCI', display: 'SMCI' },
+                    { symbol: 'MSTR', display: 'MSTR' },
+                    { symbol: 'COIN', display: 'COIN' },
+                    { symbol: 'BABA', display: 'BABA' }
+                ]
+            }
+        ];
+
+        // Initialize chart when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeChart();
+            initializeTickerSelector();
+            initializeFeatureToggles();
+            loadTickerData(currentTicker);
+        });
+
+        function initializeChart() {
+            // Create the chart with dark theme using v5 API
+            chart = LightweightCharts.createChart(document.getElementById('chart'), {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                layout: {
+                    background: {
+                        type: 'solid',
+                        color: '#131722'
+                    },
+                    textColor: '#d1d4dc',
+                },
+                grid: {
+                    vertLines: {
+                        color: '#2a2e39',
+                    },
+                    horzLines: {
+                        color: '#2a2e39',
+                    },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: {
+                        color: '#758696',
+                        width: 1,
+                        style: LightweightCharts.LineStyle.Dashed,
+                    },
+                    horzLine: {
+                        color: '#758696',
+                        width: 1,
+                        style: LightweightCharts.LineStyle.Dashed,
+                    },
+                },
+                rightPriceScale: {
+                    borderColor: '#2a2e39',
+                    textColor: '#d1d4dc',
+                },
+                timeScale: {
+                    borderColor: '#2a2e39',
+                    textColor: '#d1d4dc',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+            });
+
+            // Add candlestick series
+            candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            // Add volume series
+            volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
+                color: '#26a69a',
+                priceFormat: {
+                    type: 'volume',
+                },
+                priceScaleId: 'volume',
+            });
+
+            // Configure volume price scale
+            chart.priceScale('volume').applyOptions({
+                scaleMargins: {
+                    top: 0.8,
+                    bottom: 0,
+                },
+            });
+
+            // Add moving averages
+            ma20Series = chart.addSeries(LightweightCharts.LineSeries, {
+                color: '#2196f3',
+                lineWidth: 2,
+                title: 'MA20',
+            });
+
+            ma50Series = chart.addSeries(LightweightCharts.LineSeries, {
+                color: '#ff9800',
+                lineWidth: 2,
+                title: 'MA50',
+            });
+
+            // Handle window resize
+            window.addEventListener('resize', handleResize);
+
+            // Subscribe to crosshair move for price updates
+            chart.subscribeCrosshairMove(param => {
+                if (param.point === undefined || !param.time) {
+                    return;
+                }
+
+                const price = param.seriesData.get(candlestickSeries);
+                if (price) {
+                    updatePriceDisplay(price.close);
+                }
+            });
+        }
+
+        function initializeTickerSelector() {
+            const tickerInput = document.getElementById('ticker-input');
+            const tickerDropdown = document.getElementById('ticker-dropdown');
+
+            // Set default ticker
+            tickerInput.value = currentTicker;
+
+            // Show dropdown on focus
+            tickerInput.addEventListener('focus', function() {
+                tickerDropdown.classList.add('show');
+                filterTickers('');
+            });
+
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.ticker-selector')) {
+                    tickerDropdown.classList.remove('show');
+                }
+            });
+
+            // Filter tickers as user types
+            tickerInput.addEventListener('input', function(e) {
+                const query = e.target.value.toLowerCase();
+                filterTickers(query);
+            });
+
+            // Handle ticker selection
+            tickerDropdown.addEventListener('click', function(e) {
+                if (e.target.classList.contains('ticker-option') && !e.target.classList.contains('disabled')) {
+                    const ticker = e.target.dataset.ticker;
+                    selectTicker(ticker);
+                }
+            });
+        }
+
+        function filterTickers(query) {
+            const dropdown = document.getElementById('ticker-dropdown');
+            dropdown.innerHTML = '';
+
+            tickerGroups.forEach(group => {
+                const filteredTickers = group.tickers.filter(ticker =>
+                    ticker.symbol.toLowerCase().includes(query) ||
+                    ticker.display.toLowerCase().includes(query)
+                );
+
+                if (filteredTickers.length > 0) {
+                    // Add group header
+                    const header = document.createElement('div');
+                    header.className = 'ticker-group-header';
+                    header.textContent = group.name;
+                    dropdown.appendChild(header);
+
+                    // Add filtered tickers
+                    filteredTickers.forEach(ticker => {
+                        const option = document.createElement('div');
+                        option.className = 'ticker-option';
+                        option.dataset.ticker = ticker.symbol;
+                        option.textContent = ticker.display;
+                        dropdown.appendChild(option);
+                    });
+                }
+            });
+        }
+
+        function selectTicker(ticker) {
+            currentTicker = ticker;
+            document.getElementById('ticker-input').value = ticker;
+            document.getElementById('ticker-dropdown').classList.remove('show');
+            loadTickerData(ticker);
+        }
+
+        function initializeFeatureToggles() {
+            const featureBtns = document.querySelectorAll('.feature-btn');
+
+            featureBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const feature = this.dataset.feature;
+                    toggleFeature(feature, this);
+                });
+            });
+        }
+
+        function toggleFeature(feature, btnElement) {
+            if (activeFeatures.has(feature)) {
+                activeFeatures.delete(feature);
+                btnElement.classList.remove('active');
+                removeFeature(feature);
+            } else {
+                activeFeatures.add(feature);
+                btnElement.classList.add('active');
+                addFeature(feature);
+            }
+
+            console.log(`Feature ${feature} ${activeFeatures.has(feature) ? 'enabled' : 'disabled'}`);
+        }
+
+        function addFeature(feature) {
+            // Placeholder for adding features to chart
+            switch(feature) {
+                case 'wiseguy':
+                    // Add Wiseguy Alerts markers
+                    break;
+                case 'htf-gex':
+                    // Add HTF Gex horizontal lines
+                    break;
+                case 'expected-moves':
+                    // Add Expected Moves horizontal lines
+                    break;
+                case '0dte-gex':
+                    // Add 0DTE Gex markers/scatter
+                    break;
+            }
+        }
+
+        function removeFeature(feature) {
+            // Placeholder for removing features from chart
+            switch(feature) {
+                case 'wiseguy':
+                    // Remove Wiseguy Alerts markers
+                    break;
+                case 'htf-gex':
+                    // Remove HTF Gex horizontal lines
+                    break;
+                case 'expected-moves':
+                    // Remove Expected Moves horizontal lines
+                    break;
+                case '0dte-gex':
+                    // Remove 0DTE Gex markers/scatter
+                    break;
+            }
+        }
+
+        async function loadTickerData(ticker) {
+            try {
+                console.log(`Loading data for ${ticker}...`);
+
+                // Simulate API call
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Generate sample data based on ticker
+                const candleData = generateSampleData(ticker);
+                const volumeData = generateVolumeData(candleData);
+                const ma20Data = calculateMA(candleData, 20);
+                const ma50Data = calculateMA(candleData, 50);
+
+                // Update chart data
+                candlestickSeries.setData(candleData);
+                volumeSeries.setData(volumeData);
+                ma20Series.setData(ma20Data);
+                ma50Series.setData(ma50Data);
+
+                // Update price display
+                const lastPrice = candleData[candleData.length - 1].close;
+                updatePriceDisplay(lastPrice);
+
+                // Auto-fit content
+                chart.timeScale().fitContent();
+
+            } catch (error) {
+                console.error('Error loading ticker data:', error);
+            }
+        }
+
+        function generateSampleData(ticker) {
+            const data = [];
+            const startDate = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
+
+            // Base price varies by ticker
+            const basePrices = {
+                'SPY': 450, 'QQQ': 380, 'AAPL': 180, 'MSFT': 380, 'NVDA': 450,
+                'TSLA': 200, 'AMZN': 140, 'GOOGL': 140, 'META': 350, 'AMD': 140
+            };
+
+            let basePrice = basePrices[ticker] || 150;
+
+            for (let i = 0; i < 365; i++) {
+                const time = startDate + (i * 24 * 60 * 60);
+                const volatility = 0.02;
+                const trendFactor = Math.sin(i * 0.02) * 0.001;
+                const randomFactor = (Math.random() - 0.5) * volatility;
+
+                const priceChange = (trendFactor + randomFactor) * basePrice;
+                const open = basePrice;
+                const close = open + priceChange;
+
+                const dailyRange = Math.abs(priceChange) + (Math.random() * 0.01 * basePrice);
+                const high = Math.max(open, close) + (Math.random() * dailyRange);
+                const low = Math.min(open, close) - (Math.random() * dailyRange);
+
+                data.push({
+                    time: time,
+                    open: parseFloat(open.toFixed(2)),
+                    high: parseFloat(high.toFixed(2)),
+                    low: parseFloat(low.toFixed(2)),
+                    close: parseFloat(close.toFixed(2)),
+                });
+
+                basePrice = close;
+            }
+
+            return data;
+        }
+
+        function generateVolumeData(candleData) {
+            return candleData.map(candle => ({
+                time: candle.time,
+                value: Math.floor(Math.random() * 20000000) + 5000000,
+                color: candle.close >= candle.open
+                    ? 'rgba(38, 166, 154, 0.8)'
+                    : 'rgba(239, 83, 80, 0.8)'
+            }));
+        }
+
+        function calculateMA(data, period) {
+            const result = [];
+            for (let i = period - 1; i < data.length; i++) {
+                let sum = 0;
+                for (let j = 0; j < period; j++) {
+                    sum += data[i - j].close;
+                }
+                result.push({
+                    time: data[i].time,
+                    value: parseFloat((sum / period).toFixed(2)),
+                });
+            }
+            return result;
+        }
+
+        function updatePriceDisplay(price) {
+            const priceDisplay = document.getElementById('price-display');
+            priceDisplay.textContent = `$${price.toFixed(2)}`;
+        }
+
+        function handleResize() {
+            chart.applyOptions({
+                width: window.innerWidth,
+                height: window.innerHeight,
+            });
+        }
+    </script>
+</body>
+</html>
