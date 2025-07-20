@@ -1,7 +1,10 @@
 services:
-  inferred_gex_processor:
-    build: .
-    container_name: inferred_gex_processor
+  inferred_gex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inferred_gex
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -10,36 +13,11 @@ services:
       - REDIS_HOST=${REDIS_HOST:-localhost}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_DB=${REDIS_DB:-0}
-    restart: unless-stopped
-    networks:
-      - gexreader_network
-    depends_on:
-      - postgres
-      - redis
-
-  postgres:
-    image: timescale/timescaledb:latest-pg15
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - gexreader_network
-    profiles:
-      - local
-
-  redis:
-    image: redis:7-alpine
-    networks:
-      - gexreader_network
-    profiles:
-      - local
-
-volumes:
-  postgres_data:
-
-networks:
-  gexreader_network:
-    external: true
+      - ./logs:/app/logs
+    network_mode: "host"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
