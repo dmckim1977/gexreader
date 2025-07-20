@@ -137,9 +137,58 @@ Publishes to `inferred_gex` Redis channel:
 - **Redis**: Check `inferred_gex` channel for published data
 - **Database**: Query `inferred_gexray3` table for stored results
 
+## Testing
+
+Use the included test publisher to verify the service works without live data:
+
+```bash
+# Publish 100 test trades
+python test_publisher.py
+
+# Publish trades continuously 
+python test_publisher.py continuous
+```
+
+## Troubleshooting
+
+### Redis Connection Issues
+
+1. **Environment Variables**: Ensure `REDIS_REMOTE` is set correctly in your environment
+2. **Network**: With `network_mode: "host"`, the container uses the host network
+3. **Redis Service**: Verify Redis is running and accessible on the configured host/port
+
+```bash
+# Test Redis connection
+redis-cli -h $REDIS_REMOTE ping
+
+# Check Redis logs
+docker logs redis-container-name
+```
+
+### Common Issues
+
+- **Timeout errors**: Normal when no data is flowing on `inferred_trades` channel
+- **Connection refused**: Check Redis host configuration and network connectivity
+- **Database errors**: Ensure the `inferred_gexray3` table exists and user has permissions
+
+### Monitoring
+
+```bash
+# Watch service logs
+docker logs inferred_gex -f
+
+# Check Redis channels
+redis-cli monitor
+
+# Query database
+psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT COUNT(*) FROM inferred_gexray3;"
+```
+
 ## Performance Notes
 
 - Processes high-volume trade streams in real-time
 - Uses connection pooling for database efficiency
 - Handles JSON serialization for complex data structures
 - Implements proper error handling and graceful shutdown
+- Auto-reconnects to Redis on connection loss
+- Exponential backoff for connection retries

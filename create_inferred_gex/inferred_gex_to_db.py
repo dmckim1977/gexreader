@@ -62,42 +62,91 @@ class InferredGexProcessor:
             raise
 
     async def connect_to_redis(self):
-        """Establish connection to Redis."""
-        try:
-            pool = redis.ConnectionPool(
-                host=os.getenv("REDIS_HOST", "localhost"),
-                port=int(os.getenv("REDIS_PORT", "6379")),
-                db=int(os.getenv("REDIS_DB", "0")),
-                socket_keepalive=True,
-                socket_timeout=10,
-            )
-            self.redis_conn = redis.Redis(connection_pool=pool, decode_responses=True)
-            logger.info("Successfully connected to Redis")
-            return self.redis_conn
-        except Exception as e:
-            logger.exception(f"Error connecting to Redis: {e}")
-            raise
+        """Establish connection to Redis with retry logic."""
+        max_retries = 5
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                pool = redis.ConnectionPool(
+                    host=os.getenv("REDIS_REMOTE", os.getenv("REDIS_HOST", "localhost")),
+                    port=int(os.getenv("REDIS_PORT", "6379")),
+                    db=int(os.getenv("REDIS_DB", "0")),
+                    socket_keepalive=True,
+                    socket_timeout=5,
+                    socket_connect_timeout=5,
+                    retry_on_timeout=True,
+                )
+                self.redis_conn = redis.Redis(connection_pool=pool, decode_responses=True)
+                
+                # Test the connection
+                await self.redis_conn.ping()
+                logger.info(f"Successfully connected to Redis on attempt {attempt + 1}")
+                return self.redis_conn
+                
+            except Exception as e:
+                logger.warning(f"Redis connection attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.exception("Failed to connect to Redis after all retries")
+                    raise
 
     async def subscribe_to_inferred_trades(self):
-        """Subscribe to the inferred_trades Redis channel."""
-        try:
-            pubsub = self.redis_conn.pubsub()
-            await pubsub.subscribe(REDIS_SUBSCRIPTION_CHANNEL)
-            logger.info(f"Subscribed to Redis channel: {REDIS_SUBSCRIPTION_CHANNEL}")
-            
-            async for message in pubsub.listen():
-                if not self.running:
-                    break
-                    
-                if message['type'] == 'message':
+        """Subscribe to the inferred_trades Redis channel with auto-reconnect."""
+        while self.running:
+            pubsub = None
+            try:
+                pubsub = self.redis_conn.pubsub()
+                await pubsub.subscribe(REDIS_SUBSCRIPTION_CHANNEL)
+                logger.info(f"Subscribed to Redis channel: {REDIS_SUBSCRIPTION_CHANNEL}")
+                
+                # Wait for subscription confirmation
+                message = await pubsub.get_message(timeout=5.0)
+                if message and message['type'] == 'subscribe':
+                    logger.info(f"Subscription confirmed for channel: {REDIS_SUBSCRIPTION_CHANNEL}")
+                
+                # Listen for messages with timeout handling
+                while self.running:
                     try:
-                        trade_data = json.loads(message['data'])
-                        await self.process_trade(trade_data)
-                    except Exception as e:
-                        logger.exception(f"Error processing trade message: {e}")
+                        message = await pubsub.get_message(timeout=10.0)
+                        if message is None:
+                            # Timeout occurred, but no error - just continue
+                            logger.debug("No message received in timeout period")
+                            continue
+                            
+                        if message['type'] == 'message':
+                            try:
+                                trade_data = json.loads(message['data'])
+                                await self.process_trade(trade_data)
+                            except Exception as e:
+                                logger.exception(f"Error processing trade message: {e}")
+                                
+                    except redis.exceptions.TimeoutError:
+                        logger.warning("Redis subscription timeout, continuing...")
+                        continue
+                    except redis.exceptions.ConnectionError as e:
+                        logger.warning(f"Redis connection lost: {e}")
+                        break  # Break inner loop to reconnect
                         
-        except Exception as e:
-            logger.exception(f"Error in Redis subscription: {e}")
+            except Exception as e:
+                logger.exception(f"Error in Redis subscription: {e}")
+                
+            finally:
+                if pubsub:
+                    try:
+                        await pubsub.aclose()
+                    except Exception:
+                        pass
+                        
+            if self.running:
+                logger.info("Attempting to reconnect to Redis in 5 seconds...")
+                await asyncio.sleep(5)
+                try:
+                    await self.connect_to_redis()
+                except Exception as e:
+                    logger.warning(f"Reconnection failed: {e}")
 
     async def process_trade(self, trade_data: Dict):
         """Process individual trade and add to buffer."""
